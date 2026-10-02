@@ -219,10 +219,28 @@ func served(t *testing.T, backendURL string, groups ...string) http.Handler {
 
 func get(t *testing.T, handler http.Handler, path string) (*http.Response, string) {
 	t.Helper()
+	path, language := inLanguage(path)
+	request := httptest.NewRequest(http.MethodGet, path, nil)
+	if language != nil {
+		request.AddCookie(language)
+	}
+
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+	handler.ServeHTTP(recorder, request)
 	raw, _ := io.ReadAll(recorder.Result().Body)
 	return recorder.Result(), string(raw)
+}
+
+// inLanguage reads a test path written as "/calendar#en": the part after the
+// hash is the language the reader chose, carried as the browser carries it —
+// in the language cookie, never in the address. The path itself is what is
+// requested.
+func inLanguage(path string) (string, *http.Cookie) {
+	path, lang, found := strings.Cut(path, "#")
+	if !found {
+		return path, nil
+	}
+	return path, &http.Cookie{Name: web.LanguageCookie, Value: lang}
 }
 
 func post(t *testing.T, handler http.Handler, path string, form url.Values) (*http.Response, string) {
@@ -269,9 +287,9 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/settings/theme", plain: true},
 		{path: "/auth/signed-out", plain: true},
 		{path: "/auth/signed-out?failed=1", plain: true},
-		{path: "/?lang=en"},
-		{path: "/topics/t1?lang=en"},
-		{path: "/actions/a1?lang=en"},
+		{path: "/#en"},
+		{path: "/topics/t1#en"},
+		{path: "/actions/a1#en"},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
 			response, rendered := get(t, console, tc.path)
@@ -318,7 +336,12 @@ func TestANoticeIsAKeyNeverText(t *testing.T) {
 	}
 
 	_, rendered = get(t, console, "/collectives/c1?notice="+url.QueryEscape("Ihr Konto wurde gesperrt. Bitte hier anmelden"))
-	if strings.Contains(rendered, "gesperrt") {
+	// Looked for in the notice itself: the address is on the page elsewhere,
+	// escaped, as the language switcher's way back.
+	if strings.Contains(rendered, `class="form-notice"`) {
+		t.Error("an unknown notice drew a notice at all")
+	}
+	if strings.Contains(rendered, ">Ihr Konto wurde gesperrt") {
 		t.Error("text from the query string was shown as the console's own notice")
 	}
 }

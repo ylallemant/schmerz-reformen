@@ -129,14 +129,21 @@ a.link:hover {
   font-size: 0.8125rem;
 }
 
-.languages a {
-  text-decoration: none;
+.languages {
+  margin: 0;
+}
+
+.languages button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
   padding: 0.125rem 0.5rem;
   border: 1px solid color-mix(in srgb, var(--on-band) 45%, transparent);
   border-radius: var(--radius);
 }
 
-.languages a[aria-current="true"] {
+.languages button[aria-pressed="true"] {
   background: var(--on-band);
   color: var(--band);
   border-color: var(--on-band);

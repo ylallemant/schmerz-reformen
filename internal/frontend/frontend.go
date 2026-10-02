@@ -245,6 +245,10 @@ func (s *site) registerRoutes(mux *http.ServeMux) error {
 	// Uploaded logos, served from this origin.
 	mux.Handle("GET /media/{id}", web.NewMediaHandler(s.backend))
 
+	// The language switcher, for a browser without the script. The address
+	// never carries a language; see web.Localization.Middleware.
+	mux.HandleFunc("POST /language", s.localization.Switch)
+
 	localized := func(h http.HandlerFunc) http.Handler {
 		return s.localization.Middleware(h)
 	}

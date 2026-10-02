@@ -112,6 +112,10 @@ type Page struct {
 	// Path is the current request path, for marking the active nav item.
 	Path string
 
+	// Here is the current address with its query, which a form posts back so
+	// the reader lands where they were.
+	Here string
+
 	// Nonce authorises this page's own inline scripts under the
 	// Content-Security-Policy, and nothing else.
 	//
@@ -137,6 +141,7 @@ func NewPage(r *http.Request, l *Localization, titleKey string) Page {
 		Lang:      LanguageFrom(r.Context()),
 		Languages: l.Supported(),
 		Path:      r.URL.Path,
+		Here:      r.URL.RequestURI(),
 		Nonce:     NonceFrom(r.Context()),
 		localizer: LocalizerFrom(r.Context()),
 	}
@@ -185,6 +190,10 @@ func (p Page) Tf(id string, args ...any) string {
 func (p Page) IsCurrent(path string) bool {
 	return p.Path == path
 }
+
+// LanguageList is the offered languages as one space-separated attribute
+// value, for the language script to read.
+func (p Page) LanguageList() string { return strings.Join(p.Languages, " ") }
 
 // IsUnder reports whether the page being viewed is a nav path or sits below
 // it, so "Topics" stays marked while one topic is open.

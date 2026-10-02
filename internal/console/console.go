@@ -280,6 +280,10 @@ func (c *console) registerRoutes(mux *http.ServeMux) error {
 	// Uploaded logos, for the previews beside the upload forms.
 	mux.Handle("GET /media/{id}", web.NewMediaHandler(c.backend))
 
+	// The language switcher, for a browser without the script. The address
+	// never carries a language; see web.Localization.Middleware.
+	mux.HandleFunc("POST /language", c.localization.Switch)
+
 	c.registerAuthRoutes(mux)
 	c.registerCollectiveRoutes(mux)
 	c.registerTopicRoutes(mux)

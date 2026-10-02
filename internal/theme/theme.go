@@ -24,3 +24,9 @@ var BaseCSS []byte
 //
 //go:embed theme.js
 var ToggleJS []byte
+
+// LanguageJS keeps the language a visitor chose, in localStorage, in step with
+// the cookie the server reads. Loaded synchronously in each page's <head>.
+//
+//go:embed language.js
+var LanguageJS []byte

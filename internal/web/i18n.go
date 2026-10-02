@@ -16,8 +16,22 @@ import (
 	"golang.org/x/text/language"
 )
 
-// LanguageCookie remembers a visitor's explicit choice.
-const LanguageCookie = "schmerz_lang"
+// LanguageCookie carries a visitor's explicit choice to the server.
+//
+// **It is a copy, not the record.** The choice lives in the browser's
+// localStorage (see internal/theme/language.js), and the cookie exists only
+// because the server renders the page and never sees localStorage. The script
+// keeps the two in step: it writes the cookie whenever the choice changes, and
+// clears it when there is no choice stored — so a browser with no choice gets
+// its own language settings, whatever cookie it was carrying.
+//
+// Not HttpOnly, for that reason: the script has to be able to write and clear
+// it. It holds two letters, and a page that can read it learns nothing it
+// could not read from the page's own lang attribute.
+//
+// A different name from the HttpOnly cookie an earlier version set, because a
+// script cannot overwrite an HttpOnly cookie of the same name.
+const LanguageCookie = "schmerz_language"
 
 // Localization holds the loaded message catalogues.
 //
@@ -133,23 +147,15 @@ type carrier struct {
 // Middleware resolves the visitor's language and attaches a localizer to the
 // request, so no handler has to think about language again.
 //
-// Resolution order: an explicit ?lang= choice, then a remembered cookie, then
+// Resolution order: the choice the visitor made (carried by the cookie), then
 // the browser's Accept-Language, then the fallback.
+//
+// **The address never carries a language.** A link somebody sends is read in
+// the receiver's language, not the sender's, and a page's address stays the
+// same in every language.
 func (l *Localization) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		lang, explicit := l.resolve(r)
-		if explicit {
-			// Remember the choice, so it survives the next click.
-			http.SetCookie(w, &http.Cookie{
-				Name:     LanguageCookie,
-				Value:    lang,
-				Path:     "/",
-				MaxAge:   int((365 * 24 * 3600)),
-				HttpOnly: true,
-				SameSite: http.SameSiteLaxMode,
-			})
-		}
-
+		lang := l.resolve(r)
 		ctx := context.WithValue(r.Context(), localizerKey, carrier{
 			localizer: i18n.NewLocalizer(l.bundle, lang, l.fallback),
 			lang:      lang,
@@ -158,19 +164,58 @@ func (l *Localization) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-// resolve reports the language to use and whether the visitor asked for it
-// explicitly.
-func (l *Localization) resolve(r *http.Request) (string, bool) {
-	if lang := r.URL.Query().Get("lang"); l.isSupported(lang) {
-		return lang, true
-	}
+func (l *Localization) resolve(r *http.Request) string {
 	if cookie, err := r.Cookie(LanguageCookie); err == nil && l.isSupported(cookie.Value) {
-		return cookie.Value, false
+		return cookie.Value
 	}
 	if lang := l.fromAcceptLanguage(r.Header.Get("Accept-Language")); lang != "" {
-		return lang, false
+		return lang
 	}
-	return l.fallback, false
+	return l.fallback
+}
+
+// languageCookieAge is how long the server-set copy lives. The script renews
+// it on every page, so this only matters for a browser running none.
+const languageCookieAge = 365 * 24 * 3600
+
+// Switch handles the language switcher's form: `POST /language` with `lang`
+// and the page to go back to in `next`.
+//
+// It is the path for a browser without the script. With the script, the
+// submission is intercepted, the choice goes to localStorage, and this is
+// never asked. Either way the cookie ends up holding the choice and the
+// reader lands back on the page they were reading, at an address with no
+// language in it.
+//
+// An empty or unknown `lang` clears the choice, which hands the decision back
+// to the browser's own settings.
+func (l *Localization) Switch(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 4<<10)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "the form could not be read", http.StatusBadRequest)
+		return
+	}
+
+	cookie := &http.Cookie{
+		Name:     LanguageCookie,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+	}
+	if lang := r.PostFormValue("lang"); l.isSupported(lang) {
+		cookie.Value, cookie.MaxAge = lang, languageCookieAge
+	} else {
+		cookie.MaxAge = -1
+	}
+	http.SetCookie(w, cookie)
+
+	next := SafeNext(r.PostFormValue("next"))
+	if next == "" {
+		next = "/"
+	}
+	// 303, so the page that follows is fetched with GET and a reload does
+	// not post the switch again.
+	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
 func (l *Localization) isSupported(lang string) bool {

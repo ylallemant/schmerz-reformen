@@ -190,7 +190,11 @@ func fetch(t *testing.T, handler http.Handler, method, path string, signedIn boo
 	if form != "" {
 		body = strings.NewReader(form)
 	}
+	path, language := inLanguage(path)
 	request := httptest.NewRequest(method, path, body)
+	if language != nil {
+		request.AddCookie(language)
+	}
 	if form != "" {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
@@ -201,6 +205,18 @@ func fetch(t *testing.T, handler http.Handler, method, path string, signedIn boo
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	return recorder.Result()
+}
+
+// inLanguage reads a test path written as "/calendar#en": the part after the
+// hash is the language the reader chose, carried as the browser carries it —
+// in the language cookie, never in the address. The path itself is what is
+// requested.
+func inLanguage(path string) (string, *http.Cookie) {
+	path, lang, found := strings.Cut(path, "#")
+	if !found {
+		return path, nil
+	}
+	return path, &http.Cookie{Name: web.LanguageCookie, Value: lang}
 }
 
 func bodyOf(t *testing.T, response *http.Response) string {
@@ -274,10 +290,10 @@ func TestEveryPageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/account/signin?recover=1&next=/topics/t1", plain: true},
 		// The same pages in the other language: a catalogue with a broken
 		// template expression in it fails at render, not at load.
-		{path: "/?lang=en"},
-		{path: "/calendar?lang=en"},
-		{path: "/topics/t1?lang=en"},
-		{path: "/about?lang=en", plain: true},
+		{path: "/#en"},
+		{path: "/calendar#en"},
+		{path: "/topics/t1#en"},
+		{path: "/about#en", plain: true},
 	} {
 		name := tc.path
 		if tc.signedIn {
@@ -509,7 +525,7 @@ func TestTheMapIsHandedWordsNotMarkup(t *testing.T) {
 
 	// And in the other language the same data is worded differently — by the
 	// server, with nothing for the script to translate.
-	response = fetch(t, site, http.MethodGet, "/api/map?lang=en", false, "")
+	response = fetch(t, site, http.MethodGet, "/api/map#en", false, "")
 	if err := json.NewDecoder(response.Body).Decode(&answer); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

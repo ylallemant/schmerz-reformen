@@ -136,6 +136,7 @@ func ThemeAssets(mux *http.ServeMux, version string) {
 	serve("/static/tokens.css", "text/css; charset=utf-8", theme.TokensCSS)
 	serve("/static/base.css", "text/css; charset=utf-8", theme.BaseCSS)
 	serve("/static/theme.js", "text/javascript; charset=utf-8", theme.ToggleJS)
+	serve("/static/language.js", "text/javascript; charset=utf-8", theme.LanguageJS)
 }
 
 // contentETag is a short hash of a response body.
@@ -244,7 +245,7 @@ func (h *ThemeAssetHandler) Invalidate() {
 // where the version string is always "dev".
 func AssetVersion(fsys fs.FS, dir string) string {
 	sum := sha256.New()
-	for _, shared := range [][]byte{theme.TokensCSS, theme.BaseCSS, theme.ToggleJS} {
+	for _, shared := range [][]byte{theme.TokensCSS, theme.BaseCSS, theme.ToggleJS, theme.LanguageJS} {
 		sum.Write(shared) //nolint:errcheck
 	}
 

@@ -311,7 +311,7 @@ func (c *console) requireSignIn(next http.Handler) http.Handler {
 }
 
 // openPaths are reachable without signing in.
-var openPaths = []string{"/auth/", "/static/", "/theme/tokens.css", "/theme/assets/", "/theme/files/"}
+var openPaths = []string{"/auth/", "/static/", "/theme/tokens.css", "/theme/assets/", "/theme/files/", "/language"}
 
 func isOpenPath(path string) bool {
 	// The API documentation is the service describing itself, and describes

@@ -1,5 +1,5 @@
 {{define "layout"}}<!DOCTYPE html>
-<html lang="{{ .Lang }}">
+<html lang="{{ .Lang }}" data-languages="{{ .LanguageList }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -16,6 +16,9 @@
   <!-- The active theme, loaded after the defaults so it overrides only what it
        declares. If it fails to load, the built-in palette still applies. -->
   <link rel="stylesheet" href="/theme/tokens.css">
+  <!-- Synchronous, and first: a page in the wrong language is reloaded before
+       anything is drawn. -->
+  <script src="/static/language.js?v={{ .AssetVersion }}"></script>
   <!-- Runs synchronously so data-theme is set before the first paint: loading
        this asynchronously is what produces a flash of the wrong theme. -->
   <script nonce="{{ .Nonce }}">
@@ -42,12 +45,17 @@
       <div class="masthead-controls">
         <button id="theme-toggle" class="theme-toggle" type="button"
                 title="{{ .T "nav.theme_toggle" }}" aria-label="{{ .T "nav.theme_toggle" }}">☾</button>
-      <nav class="languages" aria-label="{{ .T "nav.language" }}">
+      {{/* A form rather than links: the choice is kept in the browser, not in
+           the address. The script intercepts it and stores the choice; without
+           the script the server sets the cookie. */}}
+      <form class="languages" method="post" action="/language" data-language-switch
+            aria-label="{{ .T "nav.language" }}">
+        <input type="hidden" name="next" value="{{ .Here }}">
         {{ $lang := .Lang }}
         {{ range .Languages }}
-        <a href="?lang={{ . }}" aria-current="{{ if eq . $lang }}true{{ else }}false{{ end }}">{{ . }}</a>
+        <button type="submit" name="lang" value="{{ . }}" aria-pressed="{{ if eq . $lang }}true{{ else }}false{{ end }}">{{ . }}</button>
         {{ end }}
-      </nav>
+      </form>
       </div>
     </div>
   </header>
