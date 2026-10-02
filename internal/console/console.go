@@ -46,10 +46,10 @@ const (
 const (
 	defaultBackendURL = "http://127.0.0.1:7500"
 
-	// fallbackLanguage is German: the editors are organising in Germany, and
-	// an interface that fell back to English would be the wrong default for
-	// nearly all of them.
-	fallbackLanguage = "de"
+	// fallbackLanguage is English, as on the public site: a browser that
+	// asks only for languages the console does not offer is more likely to
+	// read English than German. One that lists German at all gets German.
+	fallbackLanguage = "en"
 )
 
 // Definition describes the console binary.

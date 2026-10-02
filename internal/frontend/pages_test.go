@@ -365,7 +365,7 @@ func TestWhatIsNotThereIsAPageThatSaysSo(t *testing.T) {
 	}
 
 	// And the page for it is ours, in the reader's language, with a way back.
-	rendered := bodyOf(t, fetch(t, site, http.MethodGet, "/topics/gone", false, ""))
+	rendered := bodyOf(t, fetch(t, site, http.MethodGet, "/topics/gone#de", false, ""))
 	if !strings.Contains(rendered, "Zur Karte") {
 		t.Error("the not-found page offers no way back")
 	}
@@ -490,7 +490,7 @@ func TestACalendarFileCannotBeRewrittenByATitle(t *testing.T) {
 func TestTheMapIsHandedWordsNotMarkup(t *testing.T) {
 	site := served(t, fakeBackend(t).URL)
 
-	response := fetch(t, site, http.MethodGet, "/api/map?bounds=51.4,51.1,6.95,6.6", false, "")
+	response := fetch(t, site, http.MethodGet, "/api/map?bounds=51.4,51.1,6.95,6.6#de", false, "")
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", response.StatusCode)
 	}
@@ -532,6 +532,32 @@ func TestTheMapIsHandedWordsNotMarkup(t *testing.T) {
 	for _, item := range answer.Items {
 		if item.Layer == "topic" && (item.Tag != "Cut" || !strings.Contains(item.Figure, "€100 million")) {
 			t.Errorf("in English the topic reads %q / %q", item.Tag, item.Figure)
+		}
+	}
+}
+
+// TestABrowserNobodyCatersForGetsEnglish: German for a browser that lists it
+// at all, English for one that asks only for languages the site does not
+// offer, or for nothing.
+func TestABrowserNobodyCatersForGetsEnglish(t *testing.T) {
+	site := served(t, fakeBackend(t).URL)
+
+	for accept, want := range map[string]string{
+		"":               `<html lang="en"`,
+		"fr-FR,fr;q=0.9": `<html lang="en"`,
+		"es,pt;q=0.8":    `<html lang="en"`,
+		"fr,de;q=0.3":    `<html lang="de"`,
+		"de-AT":          `<html lang="de"`,
+		"en-US,en;q=0.9": `<html lang="en"`,
+	} {
+		request := httptest.NewRequest(http.MethodGet, "/about", nil)
+		if accept != "" {
+			request.Header.Set("Accept-Language", accept)
+		}
+		recorder := httptest.NewRecorder()
+		site.ServeHTTP(recorder, request)
+		if !strings.Contains(recorder.Body.String(), want) {
+			t.Errorf("Accept-Language %q: want %s", accept, want)
 		}
 	}
 }

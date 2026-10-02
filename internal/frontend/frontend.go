@@ -41,10 +41,10 @@ const (
 const (
 	defaultBackendURL = "http://127.0.0.1:7500"
 
-	// fallbackLanguage is German. The reforms are German ones and so are most
-	// of the people affected by them; a reader whose browser asks for a
-	// language the site does not have gets the one the content is written in.
-	fallbackLanguage = "de"
+	// fallbackLanguage is English: a reader whose browser asks only for
+	// languages the site does not offer is more likely to read English than
+	// German. A browser that lists German at all still gets German.
+	fallbackLanguage = "en"
 )
 
 // How much of each listing a page shows.

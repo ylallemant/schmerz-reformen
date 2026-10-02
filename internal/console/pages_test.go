@@ -245,8 +245,12 @@ func inLanguage(path string) (string, *http.Cookie) {
 
 func post(t *testing.T, handler http.Handler, path string, form url.Values) (*http.Response, string) {
 	t.Helper()
+	path, language := inLanguage(path)
 	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(form.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if language != nil {
+		request.AddCookie(language)
+	}
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -330,7 +334,7 @@ func TestANoticeIsAKeyNeverText(t *testing.T) {
 	backend, _ := fakeBackend(t, false)
 	console := served(t, backend.URL)
 
-	_, rendered := get(t, console, "/collectives/c1?notice=saved")
+	_, rendered := get(t, console, "/collectives/c1?notice=saved#de")
 	if !strings.Contains(rendered, "Gespeichert.") {
 		t.Error("a known notice was not shown")
 	}
@@ -437,7 +441,7 @@ func TestARefusedFormKeepsWhatWasTyped(t *testing.T) {
 
 	// A figure that is not a number never reaches the backend at all, and
 	// says so in the editor's language.
-	response, rendered = post(t, console, "/topics/t1", url.Values{
+	response, rendered = post(t, console, "/topics/t1#de", url.Values{
 		"title": {"Titel"}, "kind": {"cut"}, "level": {"municipal"}, "amount": {"100 Mio"},
 	})
 	if response.StatusCode != http.StatusUnprocessableEntity || !strings.Contains(rendered, "Der Betrag ist keine Zahl") {
@@ -454,7 +458,7 @@ func TestDeletingACollectiveNeedsItsAddressTyped(t *testing.T) {
 	backend, log := fakeBackend(t, false)
 	console := served(t, backend.URL)
 
-	response, rendered := post(t, console, "/collectives/c1/delete", url.Values{"confirm": {"nearly"}})
+	response, rendered := post(t, console, "/collectives/c1/delete#de", url.Values{"confirm": {"nearly"}})
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Errorf("status = %d, want the deletion refused", response.StatusCode)
 	}
