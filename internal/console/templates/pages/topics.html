@@ -1,0 +1,38 @@
+{{define "content"}}
+{{ template "collective-tabs" dict "Page" . "Collective" .Collective "Tab" "topics" }}
+<div class="heading-row">
+  <h1>{{ .T "topics.title" }}</h1>
+  <a class="button" href="/collectives/{{ .Collective.ID }}/topics/new">{{ template "icon-plus" }}{{ .T "topics.new" }}</a>
+</div>
+<p class="lede">{{ .T "topics.lede" }}</p>
+
+{{ if .Topics }}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "field.title" }}</th>
+        <th scope="col">{{ .T "field.kind" }}</th>
+        <th scope="col">{{ .T "field.amount" }}</th>
+        <th scope="col">{{ .T "field.place" }}</th>
+        <th scope="col">{{ .T "field.status" }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ $page := . }}
+      {{ range .Topics }}
+      <tr>
+        <td><a class="link" href="/topics/{{ .ID }}">{{ .Title }}</a></td>
+        <td>{{ $page.T (printf "kind.%s" .Kind) }} · {{ $page.T (printf "level.%s" .Level) }}</td>
+        <td>{{ if .Amount }}{{ $page.Money .Amount }}{{ end }}</td>
+        <td>{{ .Place }}</td>
+        <td>{{ template "status" dict "Page" $page "Status" .Status }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ else }}
+<p class="empty">{{ .T "topics.empty" }}</p>
+{{ end }}
+{{end}}

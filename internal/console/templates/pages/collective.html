@@ -1,0 +1,165 @@
+{{define "content"}}
+{{ if .New }}
+<ol class="crumbs">
+  <li><a class="link" href="/">{{ .T "nav.collectives" }}</a></li>
+  <li>{{ .T "collective.new_title" }}</li>
+</ol>
+<h1>{{ .T "collective.new_title" }}</h1>
+<p class="lede">{{ .T "collective.new_lede" }}</p>
+{{ else }}
+{{ template "collective-tabs" dict "Page" . "Collective" .Collective "Tab" "profile" }}
+<div class="heading-row">
+  <h1>{{ .Collective.Name }}</h1>
+  {{ if eq .Collective.Status "draft" }}
+  {{ template "status" dict "Page" . "Status" .Collective.Status }}
+  {{ else }}
+  <a class="button secondary small" href="{{ .SiteURL }}/collectives/{{ .Collective.Slug }}">{{ .T "button.view_public" }}</a>
+  {{ end }}
+</div>
+{{ end }}
+
+<div class="split">
+  <form class="prose" method="post" action="{{ if .New }}/collectives{{ else }}/collectives/{{ .Collective.ID }}{{ end }}">
+    <label for="name">{{ .T "field.name" }}</label>
+    <input type="text" id="name" name="name" maxlength="120" required autocomplete="off" value="{{ .Form.Name }}">
+
+    <label for="summary">{{ .T "field.summary" }}
+      <span class="hint">{{ .T "collective.summary_hint" }}</span>
+    </label>
+    <input type="text" id="summary" name="summary" maxlength="400" value="{{ .Form.Summary }}">
+
+    <label for="description">{{ .T "field.description" }}</label>
+    <textarea id="description" name="description" maxlength="20000">{{ .Form.Description }}</textarea>
+
+    <div class="field-row">
+      <div>
+        <label for="website">{{ .T "field.website" }}</label>
+        <input type="url" id="website" name="website" maxlength="500" placeholder="https://" value="{{ .Form.Website }}">
+      </div>
+      <div>
+        <label for="contact">{{ .T "field.contact" }}
+          <span class="hint">{{ .T "collective.contact_hint" }}</span>
+        </label>
+        <input type="text" id="contact" name="contact" maxlength="200" value="{{ .Form.Contact }}">
+      </div>
+    </div>
+
+    {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "collective.place_hint" }}
+
+    {{/* The two fields that decide where the collective lives and who may
+         edit it. Shown to everybody and editable by an administrator only:
+         an editor should be able to see which group they are in because of,
+         and the backend ignores both from anybody else. */}}
+    <fieldset class="fieldset">
+      <legend>{{ .T "collective.access_legend" }}</legend>
+
+      <label for="slug">{{ .T "field.slug" }}
+        <span class="hint">{{ .T "collective.slug_hint" }}</span>
+      </label>
+      <input type="text" id="slug" name="slug" maxlength="80" autocomplete="off"
+             value="{{ .Form.Slug }}"{{ if not .Admin }} readonly{{ end }}>
+
+      <label for="auth_group">{{ .T "field.auth_group" }}
+        <span class="hint">{{ .T "collective.auth_group_hint" }}</span>
+      </label>
+      <input type="text" id="auth_group" name="auth_group" maxlength="120" autocomplete="off"
+             value="{{ .Form.AuthGroup }}"{{ if not .Admin }} readonly{{ end }}>
+      {{ if not .Admin }}<p class="hint">{{ .T "collective.access_admin_only" }}</p>{{ end }}
+    </fieldset>
+
+    {{ template "status-field" dict "Page" . "Statuses" .Statuses "Current" .Form.Status }}
+
+    <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
+  </form>
+
+  {{ if not .New }}
+  <aside class="split-aside">
+    <h2>{{ .T "logo.title" }}</h2>
+    <div class="profile">
+      {{ if .Collective.LogoID }}
+      <span class="logo-box"><img src="/media/{{ .Collective.LogoID }}" alt=""></span>
+      {{ else }}
+      <span class="logo-box initial" aria-hidden="true">{{ initial .Collective.Name }}</span>
+      {{ end }}
+      <form class="profile-body" method="post" action="/collectives/{{ .Collective.ID }}/logo" enctype="multipart/form-data">
+        <label for="logo">{{ .T "logo.choose" }}
+          <span class="hint">{{ .T "logo.hint" }}</span>
+        </label>
+        <input type="file" id="logo" name="logo" accept="image/svg+xml,image/png,image/webp,image/jpeg,image/gif">
+        <div class="button-row">
+          <button class="button small" type="submit">{{ .T "logo.upload" }}</button>
+          {{ if .Collective.LogoID }}
+          <button class="button danger small" type="submit" name="remove" value="1">{{ .T "logo.remove" }}</button>
+          {{ end }}
+        </div>
+      </form>
+    </div>
+
+    <h2 id="members">{{ .T "members.title" }}</h2>
+    <p class="section-note">{{ .T "members.lede" }}</p>
+
+    {{ if .Collective.Members }}
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th scope="col">{{ .T "field.name" }}</th>
+            <th scope="col">{{ .T "field.kind" }}</th>
+            <th scope="col" class="actions-column"><span class="visually-hidden">{{ .T "button.edit" }}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ $page := . }}
+          {{ range .Collective.Members }}
+          <tr>
+            <td>{{ .Name }}</td>
+            <td>{{ $page.T (printf "member_kind.%s" .Kind) }}</td>
+            <td class="actions-column">
+              <a class="button secondary small" href="/collectives/{{ $page.Collective.ID }}/members/{{ .ID }}">{{ $page.T "button.edit" }}</a>
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+    {{ else }}
+    <p class="empty">{{ .T "members.empty" }}</p>
+    {{ end }}
+
+    <form method="post" action="/collectives/{{ .Collective.ID }}/members">
+      <h3>{{ .T "members.add" }}</h3>
+      <label for="member-name">{{ .T "field.name" }}</label>
+      <input type="text" id="member-name" name="name" maxlength="120" required autocomplete="off">
+      <div class="field-row">
+        <div>
+          <label for="member-kind">{{ .T "field.kind" }}</label>
+          <select id="member-kind" name="kind">
+            {{ $page := . }}
+            {{ range .MemberKinds }}
+            <option value="{{ . }}">{{ $page.T (printf "member_kind.%s" .) }}</option>
+            {{ end }}
+          </select>
+        </div>
+        <div>
+          <label for="member-website">{{ .T "field.website" }}</label>
+          <input type="url" id="member-website" name="website" maxlength="500" placeholder="https://">
+        </div>
+      </div>
+      <button class="button secondary" type="submit">{{ .T "members.add" }}</button>
+    </form>
+  </aside>
+  {{ end }}
+</div>
+
+{{ if and (not .New) .Admin }}
+<form method="post" action="/collectives/{{ .Collective.ID }}/delete">
+  <fieldset class="danger-zone">
+    <legend>{{ .T "collective.delete_legend" }}</legend>
+    <p>{{ .T "collective.delete_warning" }}</p>
+    <label for="confirm">{{ .Tf "collective.delete_confirm" "Slug" .Collective.Slug }}</label>
+    <input type="text" id="confirm" name="confirm" autocomplete="off" class="mono">
+    <button class="button danger" type="submit">{{ .T "collective.delete" }}</button>
+  </fieldset>
+</form>
+{{ end }}
+{{end}}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="schMERZ-Reformen">
+  <!--
+    A line that was flat and is not any more: the reading on a monitor at the
+    moment it hurts. It is the same figure the stripe under the masthead is cut
+    from, drawn once at a size that can stand as a mark.
+
+    Drawn in currentColor so the default mark follows the active palette
+    without being an asset at all. A theme that wants its own logo uploads one
+    and this is never served.
+  -->
+  <rect x="3" y="3" width="42" height="42" rx="9" fill="none" stroke="currentColor" stroke-width="3"/>
+  <path d="M8 27h9l4-9 6 17 5-12 3 4h5" fill="none" stroke="currentColor" stroke-width="3.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

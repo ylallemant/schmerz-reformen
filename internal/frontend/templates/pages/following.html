@@ -1,0 +1,74 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "following.title" }}</h1>
+  <p class="lede">{{ .T "following.lede" }}</p>
+  {{/* Said on the page rather than only in a policy: this list is the one
+       thing here that pairs an account with a political alliance, and the
+       person it belongs to should know who else can read it. Nobody. */}}
+  <p class="section-note">{{ .T "following.private" }}</p>
+  <div class="button-row">
+    <a class="button secondary" href="/feed?following=1">{{ .T "feed.following" }}</a>
+    <a class="button secondary" href="/calendar?mine=1">{{ .T "calendar.mine" }}</a>
+  </div>
+</div>
+
+<h2>{{ .T "following.actions" }}</h2>
+{{ if .Actions }}
+<ul class="agenda prose">
+  {{ $page := . }}
+  {{ range .Actions }}{{ template "action-item" dict "Page" $page "Action" . }}{{ end }}
+</ul>
+{{ else }}
+<p class="empty">{{ .T "calendar.empty_mine" }}</p>
+{{ end }}
+
+<h2>{{ .T "following.collectives" }}</h2>
+{{ if .Following.Collectives }}
+<div class="grid">
+  {{ $page := . }}
+  {{ range .Following.Collectives }}
+  <article class="card">
+    <div class="profile">
+      {{ template "logo" dict "LogoID" .LogoID "Name" .Name "Small" true }}
+      <div class="profile-body">
+        <h3 class="card-title"><a href="/collectives/{{ .Slug }}">{{ .Name }}</a></h3>
+        {{ if .Place }}<p class="card-text">{{ .Place }}</p>{{ end }}
+      </div>
+    </div>
+    <div class="card-foot">
+      <form method="post" action="/unfollow/collective/{{ .ID }}">
+        <input type="hidden" name="next" value="/account/following">
+        <button class="button secondary small" type="submit">{{ $page.T "follow.stop" }}</button>
+      </form>
+    </div>
+  </article>
+  {{ end }}
+</div>
+{{ else }}
+<p class="empty">{{ .T "following.no_collectives" }}</p>
+{{ end }}
+
+<h2>{{ .T "following.topics" }}</h2>
+{{ if .Following.Topics }}
+<div class="grid">
+  {{ $page := . }}
+  {{ range .Following.Topics }}
+  <article class="card">
+    <div class="card-meta">
+      <span class="tag topic">{{ $page.T (printf "kind.%s" .Kind) }}</span>
+      {{ if .Place }}<span>{{ .Place }}</span>{{ end }}
+    </div>
+    <h3 class="card-title"><a href="/topics/{{ .ID }}">{{ .Title }}</a></h3>
+    <div class="card-foot">
+      <form method="post" action="/unfollow/topic/{{ .ID }}">
+        <input type="hidden" name="next" value="/account/following">
+        <button class="button secondary small" type="submit">{{ $page.T "follow.stop" }}</button>
+      </form>
+    </div>
+  </article>
+  {{ end }}
+</div>
+{{ else }}
+<p class="empty">{{ .T "following.no_topics" }}</p>
+{{ end }}
+{{end}}

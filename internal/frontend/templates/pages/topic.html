@@ -1,0 +1,71 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/topics">{{ .T "nav.topics" }}</a></li>
+  {{ with .Topic.Collective }}<li><a class="link" href="/collectives/{{ .Slug }}">{{ .Name }}</a></li>{{ end }}
+</ol>
+
+<div class="split">
+  <article class="prose">
+    <div class="card-meta">
+      <span class="tag topic">{{ .T (printf "kind.%s" .Topic.Kind) }}</span>
+      <span>{{ .T (printf "level.%s" .Topic.Level) }}</span>
+      {{ if .Topic.Place }}<span>{{ .Topic.Place }}</span>{{ end }}
+      {{/* Over, and still here: the links people shared must not start
+           answering 404 on the day a fight ends. */}}
+      {{ if eq .Topic.Status "archived" }}<span class="pill">{{ .T "status.archived" }}</span>{{ end }}
+    </div>
+
+    {{ if .Topic.Amount }}<p class="amount large">{{ .Loss .Topic.Amount }}</p>{{ end }}
+    <h1>{{ .Topic.Title }}</h1>
+    {{ if .Topic.Summary }}<p class="lede">{{ .Topic.Summary }}</p>{{ end }}
+
+    <div class="actions-row">
+      {{ template "follow-button" dict "Page" . "Target" "topic" "ID" .Topic.ID "Following" .Topic.Following "Followers" .Topic.Followers }}
+    </div>
+
+    {{ if .Topic.Body }}<p class="body-text">{{ .Topic.Body }}</p>{{ end }}
+
+    {{/* A claim about a budget with no source is a rumour. Where one was
+         given it is shown as what it is: where to check. */}}
+    {{ if .Topic.SourceURL }}
+    <p class="section-note">{{ .T "topic.source" }}
+      <a class="link" href="{{ .Topic.SourceURL }}" rel="noopener noreferrer">{{ .Topic.SourceURL }}</a></p>
+    {{ end }}
+
+    <h2 id="updates">{{ .T "topic.updates" }}</h2>
+    {{ if .Updates }}
+    <ul class="feed">
+      {{ $page := . }}
+      {{ range .Updates }}{{ template "update-card" dict "Page" $page "Update" . "HideTopic" true "HideCollective" true }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "topic.no_updates" }}</p>
+    {{ end }}
+  </article>
+
+  <aside class="split-aside">
+    {{ if .UsesMap }}
+    <div class="map small" data-latitude="{{ .Topic.Latitude }}" data-longitude="{{ .Topic.Longitude }}"
+         data-layer="topic" data-attribution="{{ .T "map.attribution" }}"></div>
+    {{ end }}
+
+    <h2>{{ .T "topic.actions" }}</h2>
+    {{ if .Actions }}
+    <ul class="agenda">
+      {{ $page := . }}
+      {{ range .Actions }}{{ template "action-item" dict "Page" $page "Action" . "HideCollective" true }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "topic.no_actions" }}</p>
+    {{ end }}
+
+    {{ with .Topic.Collective }}
+    <h2>{{ $.T "topic.by" }}</h2>
+    <a class="member" href="/collectives/{{ .Slug }}">
+      {{ template "logo" dict "LogoID" .LogoID "Name" .Name }}
+      <span class="member-name">{{ .Name }}</span>
+    </a>
+    {{ end }}
+  </aside>
+</div>
+{{end}}

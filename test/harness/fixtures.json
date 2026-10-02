@@ -1,0 +1,163 @@
+{
+  "note": "Example content for a local run. Every organisation here is invented and marked as an example: fixtures must never put words in the mouth of a real union, party or association.",
+  "collectives": [
+    {
+      "name": "Düsseldorfer Bündnis für eine soziale Stadt (Beispiel)",
+      "slug": "duesseldorf",
+      "auth_group": "buendnis-duesseldorf",
+      "summary": "Beispieldaten: Gewerkschaften, Mieterverein und Initiativen gegen die Kürzungen im städtischen Haushalt.",
+      "description": "Dies ist ein Beispielbündnis für die lokale Entwicklungsumgebung.\n\nEs zeigt, wie ein Bündnis auf dieser Seite aussieht: wer dabei ist, woran es arbeitet, was es zuletzt gemeldet hat und wann die nächste Aktion ist.",
+      "website": "https://example.org/duesseldorf",
+      "contact": "kontakt@example.org",
+      "place": "Düsseldorf", "latitude": 51.2277, "longitude": 6.7735, "zoom": 11,
+      "members": [
+        {"name": "Beispiel-Gewerkschaft Öffentlicher Dienst", "kind": "union", "website": "https://example.org/gewerkschaft"},
+        {"name": "Mieterverein Beispielstadt", "kind": "association"},
+        {"name": "Beispielpartei, Kreisverband", "kind": "party"},
+        {"name": "Initiative Bäder retten", "kind": "initiative"}
+      ],
+      "topics": [
+        {
+          "title": "Haushalt 2027: 100 Millionen Euro weniger",
+          "kind": "cut", "level": "municipal", "amount": 100000000,
+          "summary": "Beispiel: Der Haushaltsentwurf sieht Einsparungen von 100 Millionen Euro vor – bei Jugendhilfe, Kultur, Bädern und Personal.",
+          "body": "Dies ist ein Beispieltext.\n\nEin Thema beschreibt, was geplant ist, wer darüber entscheidet, wie viel Geld es betrifft und wo es ankommt. Es bleibt richtig, solange die Auseinandersetzung dauert; was sich tut, steht in den Neuigkeiten darunter.",
+          "source_url": "https://example.org/ratsinformation/vorlage-2026-0412",
+          "place": "Düsseldorf", "latitude": 51.2277, "longitude": 6.7735, "zoom": 11,
+          "updates": [
+            {"title": "Der Rat hat die Abstimmung vertagt", "days_ago": 1,
+             "body": "Beispielmeldung: Die Abstimmung über den Haushalt ist auf die nächste Sitzung verschoben. Das gibt uns drei Wochen mehr Zeit."},
+            {"title": "Dreihundert Menschen vor dem Rathaus", "days_ago": 6,
+             "body": "Beispielmeldung: Zur ersten Kundgebung kamen rund dreihundert Menschen. Die Rednerinnen und Redner forderten, die Kürzungen bei der Jugendhilfe zurückzunehmen."}
+          ]
+        },
+        {
+          "title": "Stadtteilbad soll schließen",
+          "kind": "closure", "level": "municipal",
+          "summary": "Beispiel: Das Hallenbad im Stadtteil steht auf der Streichliste. Das nächste Bad ist zwanzig Minuten mit der Bahn entfernt.",
+          "place": "Hallenbad, Kettwiger Straße, Düsseldorf", "latitude": 51.2176, "longitude": 6.8073, "zoom": 17,
+          "updates": [
+            {"title": "Unterschriften übergeben", "days_ago": 3,
+             "body": "Beispielmeldung: Die Initiative hat viertausend Unterschriften für den Erhalt des Bades übergeben."}
+          ]
+        },
+        {
+          "title": "Noch in Arbeit: Kürzungen bei der Stadtbücherei",
+          "kind": "cut", "level": "municipal", "status": "draft",
+          "summary": "Beispiel für einen Entwurf: nur in der Redaktion sichtbar.",
+          "place": "Düsseldorf", "latitude": 51.2277, "longitude": 6.7735, "zoom": 11
+        }
+      ],
+      "actions": [
+        {"title": "Kundgebung vor dem Rathaus", "kind": "rally", "in_days": 5, "at": "17:00", "hours": 2,
+         "topic": "Haushalt 2027: 100 Millionen Euro weniger",
+         "description": "Beispielaktion: Kundgebung zur Ratssitzung. Bringt Transparente und Trillerpfeifen mit.",
+         "place": "vor dem Rathaus, Marktplatz, Düsseldorf", "latitude": 51.2259, "longitude": 6.7724, "zoom": 18},
+        {"title": "Offenes Bündnistreffen", "kind": "meeting", "in_days": 12, "at": "19:00",
+         "description": "Beispielaktion: Jeden Monat, offen für alle, die mitmachen wollen.",
+         "place": "Bürgerhaus, Düsseldorf", "latitude": 51.2189, "longitude": 6.7860, "zoom": 17},
+        {"title": "Infostand am Samstag", "kind": "info", "in_days": 3, "at": "11:00", "cancelled": true,
+         "description": "Beispiel für eine abgesagte Aktion: Sie bleibt sichtbar und sagt, dass sie ausfällt.",
+         "place": "Schadowplatz, Düsseldorf", "latitude": 51.2262, "longitude": 6.7806, "zoom": 17}
+      ]
+    },
+    {
+      "name": "Kölner Bündnis gegen Kürzungen (Beispiel)",
+      "slug": "koeln",
+      "auth_group": "buendnis-koeln",
+      "summary": "Beispieldaten: Träger der Jugendhilfe, Gewerkschaften und Elterninitiativen.",
+      "place": "Köln", "latitude": 50.9375, "longitude": 6.9603, "zoom": 11,
+      "members": [
+        {"name": "Beispielverband freier Träger", "kind": "association"},
+        {"name": "Beispiel-Gewerkschaft Erziehung", "kind": "union"}
+      ],
+      "topics": [
+        {
+          "title": "Zwölf Millionen weniger für die Jugendhilfe",
+          "kind": "cut", "level": "municipal", "amount": 12000000,
+          "summary": "Beispiel: Offene Türen und Jugendzentren sollen Stellen verlieren.",
+          "place": "Köln", "latitude": 50.9375, "longitude": 6.9603, "zoom": 11,
+          "updates": [
+            {"title": "Ausschuss berät am Donnerstag", "days_ago": 2,
+             "body": "Beispielmeldung: Der Jugendhilfeausschuss berät die Vorlage. Die Sitzung ist öffentlich."}
+          ]
+        }
+      ],
+      "actions": [
+        {"title": "Demonstration: Jugend ist keine Sparbüchse", "kind": "demonstration", "in_days": 9, "at": "14:00", "hours": 3,
+         "topic": "Zwölf Millionen weniger für die Jugendhilfe",
+         "description": "Beispielaktion: Start am Heumarkt, Abschluss vor dem Rathaus.",
+         "place": "Heumarkt, Köln", "latitude": 50.9361, "longitude": 6.9603, "zoom": 17},
+        {"title": "Sitzung des Jugendhilfeausschusses", "kind": "council", "in_days": 2, "at": "16:00",
+         "topic": "Zwölf Millionen weniger für die Jugendhilfe",
+         "description": "Beispiel: Die Sitzung, in der entschieden wird. Öffentlich; Zuhören ist erlaubt.",
+         "place": "Rathaus, Köln", "latitude": 50.9382, "longitude": 6.9593, "zoom": 18}
+      ]
+    },
+    {
+      "name": "Leipzig bleibt sozial (Beispiel)",
+      "slug": "leipzig",
+      "auth_group": "buendnis-leipzig",
+      "summary": "Beispieldaten: Fahrgastverband, Gewerkschaften und Stadtteilinitiativen.",
+      "place": "Leipzig", "latitude": 51.3397, "longitude": 12.3731, "zoom": 11,
+      "members": [
+        {"name": "Fahrgastverband Beispiel", "kind": "association"},
+        {"name": "Stadtteilinitiative Ost", "kind": "initiative"}
+      ],
+      "topics": [
+        {
+          "title": "Bus und Bahn fahren seltener",
+          "kind": "cut", "level": "municipal", "amount": 8000000,
+          "summary": "Beispiel: Wegen gekürzter Zuschüsse des Landes soll der Takt auf mehreren Linien ausgedünnt werden.",
+          "place": "Leipzig", "latitude": 51.3397, "longitude": 12.3731, "zoom": 11,
+          "updates": [
+            {"title": "Welche Linien betroffen sind", "days_ago": 4,
+             "body": "Beispielmeldung: Die Verkehrsbetriebe haben die Liste der Linien veröffentlicht, auf denen abends nur noch alle dreißig Minuten gefahren wird."}
+          ]
+        }
+      ],
+      "actions": [
+        {"title": "Fahrgäste zählen nach", "kind": "info", "in_days": 7, "at": "07:00",
+         "topic": "Bus und Bahn fahren seltener",
+         "description": "Beispielaktion: Wir zählen an den Haltestellen, wie voll die Bahnen wirklich sind.",
+         "place": "Hauptbahnhof, Leipzig", "latitude": 51.3455, "longitude": 12.3811, "zoom": 17}
+      ]
+    },
+    {
+      "name": "Bündnis Sozialstaat verteidigen (Beispiel)",
+      "slug": "sozialstaat",
+      "auth_group": "buendnis-sozialstaat",
+      "summary": "Beispieldaten: ein bundesweites Bündnis ohne festen Ort – es hat keinen Punkt auf der Karte.",
+      "place": "bundesweit",
+      "members": [
+        {"name": "Beispiel-Sozialverband", "kind": "association"},
+        {"name": "Beispiel-Gewerkschaftsbund", "kind": "union"},
+        {"name": "Beispielpartei", "kind": "party"}
+      ],
+      "topics": [
+        {
+          "title": "Umbau des Bürgergelds",
+          "kind": "reform", "level": "federal",
+          "summary": "Beispiel: Eine Bundesreform ohne örtlichen Bezug hat keinen Punkt auf der Karte, aber eine Seite und Neuigkeiten.",
+          "place": "Deutschland",
+          "updates": [
+            {"title": "Erste Lesung im Bundestag", "days_ago": 5,
+             "body": "Beispielmeldung: Der Entwurf wurde in erster Lesung beraten und in die Ausschüsse überwiesen."}
+          ]
+        },
+        {
+          "title": "Weniger Bundesmittel für die Kommunen",
+          "kind": "cut", "level": "federal", "amount": 2500000000,
+          "summary": "Beispiel: Was im Bund gestrichen wird, kommt Monate später als Zeile in den städtischen Haushalten an.",
+          "place": "Deutschland"
+        }
+      ],
+      "actions": [
+        {"title": "Bundesweiter Aktionstag", "kind": "demonstration", "in_days": 20, "at": "13:00", "hours": 4,
+         "topic": "Umbau des Bürgergelds",
+         "description": "Beispielaktion: Zentrale Demonstration in Berlin, dezentrale Aktionen in vielen Städten.",
+         "place": "Brandenburger Tor, Berlin", "latitude": 52.5163, "longitude": 13.3777, "zoom": 17}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "audit.title" }}</h1>
+  <p class="lede">{{ if .Admin }}{{ .T "audit.lede_admin" }}{{ else }}{{ .T "audit.lede" }}{{ end }}</p>
+  <p class="section-note">{{ .T "audit.append_only" }}</p>
+</div>
+
+{{ if .Entries }}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "audit.when" }}</th>
+        <th scope="col">{{ .T "audit.who" }}</th>
+        <th scope="col">{{ .T "audit.what" }}</th>
+        <th scope="col">{{ .T "audit.subject" }}</th>
+        <th scope="col">{{ .T "audit.collective" }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ $page := . }}
+      {{ range .Entries }}
+      <tr>
+        <td><time datetime="{{ $page.ISO .At }}">{{ $page.ShortDate .At }}, {{ $page.Time .At }}</time></td>
+        {{/* The name they had when they did it, with the identifier that
+             does not change on hover: a log of opaque identifiers is one
+             nobody reads. */}}
+        <td title="{{ .Actor }}">{{ if .ActorName }}{{ .ActorName }}{{ else }}<span class="mono">{{ .Actor }}</span>{{ end }}</td>
+        <td>{{ $page.T (printf "audit.action.%s" .Action) }}</td>
+        <td>{{ $page.T (printf "audit.type.%s" .SubjectType) }}{{ if .Summary }}: {{ .Summary }}{{ end }}</td>
+        <td>{{ .Collective }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+
+{{ if gt .Pages 1 }}
+<nav class="pagination" aria-label="{{ .T "audit.pages" }}">
+  {{ if gt .Page 1 }}<a class="button secondary small" href="/audit?page={{ dec .Page }}">{{ .T "audit.newer" }}</a>{{ else }}<span></span>{{ end }}
+  <span class="section-note">{{ .Tf "audit.position" "Page" .Page "Pages" .Pages }}</span>
+  {{ if lt .Page .Pages }}<a class="button secondary small" href="/audit?page={{ inc .Page }}">{{ .T "audit.older" }}</a>{{ else }}<span></span>{{ end }}
+</nav>
+{{ end }}
+{{ else }}
+<p class="empty">{{ .T "audit.empty" }}</p>
+{{ end }}
+{{end}}

@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "topics.title" }}</h1>
+  <p class="lede">{{ .T "topics.lede" }}</p>
+</div>
+
+{{/* Filters are links, not a form: each is an address somebody can send, and
+     pressing one needs no script. The one in force links back to the page
+     without it, so the same control switches it off. */}}
+{{ $page := . }}{{ $kind := .Kind }}{{ $level := .Level }}
+<div class="filters" role="group" aria-label="{{ .T "topics.filter_kind" }}">
+  <a class="chip" href="/topics{{ if $level }}?level={{ $level }}{{ end }}"{{ if not $kind }} aria-current="true"{{ end }}>{{ .T "topics.all_kinds" }}</a>
+  {{ range .Kinds }}
+  <a class="chip" href="/topics?kind={{ . }}{{ if $level }}&amp;level={{ $level }}{{ end }}"{{ if eq . $kind }} aria-current="true"{{ end }}>{{ $page.T (printf "kind.%s" .) }}</a>
+  {{ end }}
+</div>
+<div class="filters" role="group" aria-label="{{ .T "topics.filter_level" }}">
+  <a class="chip" href="/topics{{ if $kind }}?kind={{ $kind }}{{ end }}"{{ if not $level }} aria-current="true"{{ end }}>{{ .T "topics.all_levels" }}</a>
+  {{ range .Levels }}
+  <a class="chip" href="/topics?level={{ . }}{{ if $kind }}&amp;kind={{ $kind }}{{ end }}"{{ if eq . $level }} aria-current="true"{{ end }}>{{ $page.T (printf "level.%s" .) }}</a>
+  {{ end }}
+</div>
+
+{{ if .Topics }}
+<p class="section-note">{{ .Tf "topics.count" "Count" (.Count .Total) }}</p>
+<div class="grid">
+  {{ range .Topics }}{{ template "topic-card" dict "Page" $page "Topic" . }}{{ end }}
+</div>
+{{ else }}
+<p class="empty">{{ .T "topics.empty" }}</p>
+{{ end }}
+{{end}}

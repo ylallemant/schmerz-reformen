@@ -1,0 +1,119 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/">{{ .T "nav.collectives" }}</a></li>
+  <li><a class="link" href="/collectives/{{ .Collective.ID }}/topics">{{ .Collective.Name }}</a></li>
+  <li>{{ if .New }}{{ .T "topic.new_title" }}{{ else }}{{ .Topic.Title }}{{ end }}</li>
+</ol>
+<div class="heading-row">
+  <h1>{{ if .New }}{{ .T "topic.new_title" }}{{ else }}{{ .Topic.Title }}{{ end }}</h1>
+  {{ if not .New }}
+  {{ if eq .Topic.Status "draft" }}
+  {{ template "status" dict "Page" . "Status" .Topic.Status }}
+  {{ else }}
+  <a class="button secondary small" href="{{ .SiteURL }}/topics/{{ .Topic.ID }}">{{ .T "button.view_public" }}</a>
+  {{ end }}
+  {{ end }}
+</div>
+
+<div class="split">
+  <form class="prose" method="post" action="{{ if .New }}/collectives/{{ .Collective.ID }}/topics{{ else }}/topics/{{ .Topic.ID }}{{ end }}">
+    <label for="title">{{ .T "field.title" }}
+      <span class="hint">{{ .T "topic.title_hint" }}</span>
+    </label>
+    <input type="text" id="title" name="title" maxlength="160" required autocomplete="off" value="{{ .Form.Title }}">
+
+    <div class="field-row">
+      <div>
+        <label for="kind">{{ .T "field.kind" }}</label>
+        <select id="kind" name="kind">
+          {{ $page := . }}{{ $kind := .Form.Kind }}
+          {{ range .Kinds }}
+          <option value="{{ . }}"{{ if eq . $kind }} selected{{ end }}>{{ $page.T (printf "kind.%s" .) }}</option>
+          {{ end }}
+        </select>
+      </div>
+      <div>
+        <label for="level">{{ .T "field.level" }}
+          <span class="hint">{{ .T "topic.level_hint" }}</span>
+        </label>
+        <select id="level" name="level">
+          {{ $level := .Form.Level }}
+          {{ range .Levels }}
+          <option value="{{ . }}"{{ if eq . $level }} selected{{ end }}>{{ $page.T (printf "level.%s" .) }}</option>
+          {{ end }}
+        </select>
+      </div>
+    </div>
+
+    <label for="amount">{{ .T "field.amount" }}
+      <span class="hint">{{ .T "topic.amount_hint" }}</span>
+    </label>
+    {{/* Text, not number: people write money with dots, spaces and a
+         currency sign, and a number field refuses all three before anybody
+         can read what was meant. */}}
+    <input type="text" id="amount" name="amount" inputmode="numeric" autocomplete="off"
+           value="{{ if .Amount }}{{ .Amount }}{{ else if .Form.Amount }}{{ .Form.Amount }}{{ end }}">
+
+    <label for="summary">{{ .T "field.summary" }}
+      <span class="hint">{{ .T "topic.summary_hint" }}</span>
+    </label>
+    <textarea class="short" id="summary" name="summary" maxlength="400">{{ .Form.Summary }}</textarea>
+
+    <label for="body">{{ .T "field.body" }}</label>
+    <textarea id="body" name="body" maxlength="20000">{{ .Form.Body }}</textarea>
+
+    <label for="source_url">{{ .T "field.source" }}
+      <span class="hint">{{ .T "topic.source_hint" }}</span>
+    </label>
+    <input type="url" id="source_url" name="source_url" maxlength="500" placeholder="https://" value="{{ .Form.SourceURL }}">
+
+    {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "topic.place_hint" }}
+
+    {{ template "status-field" dict "Page" . "Statuses" .Statuses "Current" .Form.Status }}
+
+    <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
+  </form>
+
+  {{ if not .New }}
+  <aside class="split-aside">
+    <div class="heading-row" id="updates">
+      <h2>{{ .T "updates.title" }}</h2>
+      <a class="button small" href="/topics/{{ .Topic.ID }}/updates/new">{{ template "icon-plus" }}{{ .T "updates.new" }}</a>
+    </div>
+    <p class="section-note">{{ .T "updates.lede" }}</p>
+
+    {{ if .Updates }}
+    <ul class="feed">
+      {{ $page := . }}
+      {{ range .Updates }}
+      <li class="card">
+        <div class="card-meta">
+          {{ template "status" dict "Page" $page "Status" .Status }}
+          {{ if .PublishedAt }}<time datetime="{{ $page.ISO .PublishedAt }}">{{ $page.ShortDate .PublishedAt }}</time>{{ end }}
+        </div>
+        <h3 class="card-title"><a href="/updates/{{ .ID }}">{{ .Title }}</a></h3>
+        <p class="card-text">{{ .Excerpt }}{{ if .Truncated }}<span class="card-more"> …</span>{{ end }}</p>
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "updates.empty" }}</p>
+    {{ end }}
+
+    <h2>{{ .T "tab.actions" }}</h2>
+    <p class="section-note">{{ .T "topic.actions_note" }}</p>
+    <a class="button secondary small" href="/collectives/{{ .Collective.ID }}/actions/new?topic={{ .Topic.ID }}">{{ .T "actions.new" }}</a>
+  </aside>
+  {{ end }}
+</div>
+
+{{ if not .New }}
+<form method="post" action="/topics/{{ .Topic.ID }}/delete" data-confirm="{{ .T "topic.delete_confirm" }}">
+  <fieldset class="danger-zone">
+    <legend>{{ .T "topic.delete_legend" }}</legend>
+    <p>{{ .T "topic.delete_warning" }}</p>
+    <button class="button danger" type="submit">{{ .T "topic.delete" }}</button>
+  </fieldset>
+</form>
+{{ end }}
+{{end}}

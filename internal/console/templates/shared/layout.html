@@ -1,0 +1,181 @@
+{{define "layout"}}<!DOCTYPE html>
+<html lang="{{ .Lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ .T .Title }} — {{ .T "console.name" }}</title>
+  <link rel="icon" href="/theme/assets/mark">
+  {{/* The map's own stylesheet comes first, so ours overrides it. Served from
+       this origin rather than a CDN: see internal/web/thirdparty/leaflet/
+       PROVENANCE.md. */}}
+  {{ if .UsesMap }}
+  <link rel="stylesheet" href="/static/third-party/leaflet/leaflet.css?v={{ .AssetVersion }}">
+  {{ end }}
+  <link rel="stylesheet" href="/static/tokens.css?v={{ .AssetVersion }}">
+  <link rel="stylesheet" href="/static/base.css?v={{ .AssetVersion }}">
+  <!-- The active theme, loaded after the defaults so it overrides only what it
+       declares. If it fails to load, the built-in palette still applies. -->
+  <link rel="stylesheet" href="/theme/tokens.css">
+  <!-- Runs synchronously so data-theme is set before the first paint: loading
+       this asynchronously is what produces a flash of the wrong theme. -->
+  <script nonce="{{ .Nonce }}">
+    (function () {
+      try {
+        var t = localStorage.getItem("schmerz-theme");
+        if (t === "light" || t === "dark") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="masthead-identity">
+        <img class="logo" src="/theme/assets/logo" alt="" width="40" height="40">
+        <div>
+        <a class="wordmark" href="/">sch<strong>MERZ</strong>-Reformen</a>
+        <div class="tagline">{{ .T "console.tagline" }}</div>
+        </div>
+      </div>
+      <div class="masthead-controls">
+        <button id="theme-toggle" class="theme-toggle" type="button"
+                title="{{ .T "nav.theme_toggle" }}" aria-label="{{ .T "nav.theme_toggle" }}">☾</button>
+      <nav class="languages" aria-label="{{ .T "nav.language" }}">
+        {{ $lang := .Lang }}
+        {{ range .Languages }}
+        <a href="?lang={{ . }}" aria-current="{{ if eq . $lang }}true{{ else }}false{{ end }}">{{ . }}</a>
+        {{ end }}
+      </nav>
+      </div>
+    </div>
+  </header>
+  <div class="stripe" aria-hidden="true"></div>
+
+  {{/* Nothing to navigate to for somebody who is not signed in: the only
+       pages they can reach are the ones that say so. */}}
+  {{ if .Editor }}
+  <nav class="nav" aria-label="{{ .T "nav.main" }}">
+    <div class="nav-inner">
+      {{ template "navlink" dict "Page" . "Href" "/" "Key" "nav.collectives" }}
+      {{ template "navlink" dict "Page" . "Href" "/audit" "Key" "nav.audit" }}
+      {{/* Absent, not disabled, for somebody who cannot use it. The backend
+           is what refuses; this only spares them a page that says no. */}}
+      {{ if .Admin }}
+      {{ template "navlink" dict "Page" . "Href" "/settings/theme" "Key" "nav.theme" }}
+      {{ end }}
+      <span class="nav-spacer"></span>
+      <span class="nav-identity">{{ .Editor }}</span>
+      {{/* A form, because signing out is a change. A link would be followed
+           by every prefetcher that touches the page. */}}
+      {{ if not .Development }}
+      <form class="nav-form" method="post" action="/auth/logout">
+        <button class="nav-button" type="submit">{{ .T "nav.signout" }}</button>
+      </form>
+      {{ end }}
+    </div>
+  </nav>
+  {{ end }}
+
+  <main>
+    {{ if .Development }}
+    <p class="warning">{{ .T "console.development" }}</p>
+    {{ end }}
+    {{ if .Notice }}
+    <p class="form-notice" role="status">{{ .T .Notice }}</p>
+    {{ end }}
+    {{ if .Problem }}
+    <p class="form-error" role="alert">{{ .Problem }}</p>
+    {{ end }}
+    {{ template "content" . }}
+  </main>
+
+  <div class="stripe foot" aria-hidden="true"></div>
+  <footer>
+    <div class="footer-inner">
+      <p>{{ .T "console.footer" }}</p>
+    </div>
+  </footer>
+  {{ if .UsesMap }}
+  <script src="/static/third-party/leaflet/leaflet.js?v={{ .AssetVersion }}"></script>
+  <script src="/static/picker.js?v={{ .AssetVersion }}"></script>
+  {{ end }}
+  <script src="/static/confirm.js?v={{ .AssetVersion }}"></script>
+  <script src="/static/theme.js?v={{ .AssetVersion }}"></script>
+</body>
+</html>{{end}}
+
+{{define "navlink"}}<a href="{{ .Href }}"{{ if (.Page.IsUnder .Href) }} aria-current="page"{{ end }}>{{ .Page.T .Key }}</a>{{end}}
+
+{{/* Icons are inline SVG rather than a font or an image: they inherit
+     currentColor, so they follow the theme without a second palette, and they
+     cost no request. aria-hidden because the control around them carries the
+     label. */}}
+{{define "icon-plus"}}<svg class="icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"
+  fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+><path d="M8 3.25v9.5M3.25 8h9.5"/></svg>{{end}}
+
+{{/* A status as a pill. One definition, so "published" looks the same in
+     every table that shows one. */}}
+{{define "status"}}<span class="pill{{ if eq .Status "published" }} ok{{ end }}">{{ .Page.T (printf "status.%s" .Status) }}</span>{{end}}
+
+{{/* The status field of a form. The choices differ by what is being edited —
+     news is never archived — so the list is passed in. */}}
+{{define "status-field"}}
+{{ $page := .Page }}{{ $current := .Current }}
+<label for="status">{{ $page.T "field.status" }}
+  <span class="hint">{{ $page.T "field.status_hint" }}</span>
+</label>
+<select id="status" name="status">
+  {{ range .Statuses }}
+  <option value="{{ . }}"{{ if eq . $current }} selected{{ end }}>{{ $page.T (printf "status.%s" .) }}</option>
+  {{ end }}
+</select>
+{{end}}
+
+{{/* Where something is: a map to aim a pin on, and the name to show for it.
+
+     The coordinates and the zoom travel in hidden fields the script fills in.
+     With no script the map does not appear and the fields keep whatever they
+     were rendered with, so a save still works and simply leaves the place
+     where it was. */}}
+{{define "place-picker"}}
+{{ $page := .Page }}
+<fieldset class="fieldset">
+  <legend>{{ $page.T "place.legend" }}</legend>
+  <p class="hint">{{ $page.T .Hint }}</p>
+
+  <div id="picker" class="picker"
+       data-latitude="{{ .Place.Latitude }}" data-longitude="{{ .Place.Longitude }}" data-zoom="{{ .Zoom }}"
+       data-moved="{{ $page.T "place.moved" }}" data-cleared="{{ $page.T "place.cleared" }}"
+       data-attribution="{{ $page.T "place.attribution" }}"></div>
+  <input type="hidden" id="latitude" name="latitude" value="{{ .Place.Latitude }}">
+  <input type="hidden" id="longitude" name="longitude" value="{{ .Place.Longitude }}">
+  <input type="hidden" id="zoom" name="zoom" value="{{ .Zoom }}">
+
+  <p class="button-row">
+    <button type="button" class="button secondary small" id="picker-clear">{{ $page.T "place.clear" }}</button>
+    <span id="picker-status" class="hint" role="status" aria-live="polite"></span>
+  </p>
+
+  <label for="place">{{ $page.T "place.name" }}
+    <span class="hint">{{ $page.T "place.name_hint" }}</span>
+  </label>
+  <input type="text" id="place" name="place" maxlength="160" autocomplete="off" value="{{ .Place.Place }}">
+</fieldset>
+{{end}}
+
+{{/* The tabs of one collective: its profile, its topics, its actions. */}}
+{{define "collective-tabs"}}
+{{ $page := .Page }}{{ $id := .Collective.ID }}
+<ol class="crumbs">
+  <li><a class="link" href="/">{{ $page.T "nav.collectives" }}</a></li>
+  <li>{{ .Collective.Name }}</li>
+</ol>
+<div class="filters" role="navigation" aria-label="{{ .Collective.Name }}">
+  <a class="chip" href="/collectives/{{ $id }}"{{ if eq .Tab "profile" }} aria-current="true"{{ end }}>{{ $page.T "tab.profile" }}</a>
+  <a class="chip" href="/collectives/{{ $id }}/topics"{{ if eq .Tab "topics" }} aria-current="true"{{ end }}>{{ $page.T "tab.topics" }}</a>
+  <a class="chip" href="/collectives/{{ $id }}/actions"{{ if eq .Tab "actions" }} aria-current="true"{{ end }}>{{ $page.T "tab.actions" }}</a>
+</div>
+{{end}}

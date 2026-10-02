@@ -1,0 +1,88 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/collectives">{{ .T "nav.collectives" }}</a></li>
+</ol>
+
+<div class="profile">
+  {{ template "logo" dict "LogoID" .Collective.LogoID "Name" .Collective.Name }}
+  <div class="profile-body prose">
+    <div class="card-meta">
+      <span class="tag collective">{{ .T "map.layer_collective" }}</span>
+      {{ if .Collective.Place }}<span>{{ .Collective.Place }}</span>{{ end }}
+      {{ if eq .Collective.Status "archived" }}<span class="pill">{{ .T "status.archived" }}</span>{{ end }}
+    </div>
+    <h1>{{ .Collective.Name }}</h1>
+    {{ if .Collective.Summary }}<p class="lede">{{ .Collective.Summary }}</p>{{ end }}
+
+    <div class="actions-row">
+      {{ template "follow-button" dict "Page" . "Target" "collective" "ID" .Collective.ID "Following" .Collective.Following "Followers" .Collective.Followers }}
+      {{ if .Collective.Website }}
+      <a class="button secondary" href="{{ .Collective.Website }}" rel="noopener noreferrer">{{ .T "collective.website" }}</a>
+      {{ end }}
+      <a class="button secondary" href="/collectives/{{ .Collective.Slug }}/calendar.ics">{{ .T "calendar.subscribe" }}</a>
+    </div>
+  </div>
+</div>
+
+<div class="split">
+  <div class="prose">
+    {{ if .Collective.Description }}<p class="body-text">{{ .Collective.Description }}</p>{{ end }}
+    {{/* The one contact detail this site publishes about anybody: an address
+         an organisation chose to be reached at. Shown as text, not turned
+         into a link: whether it is an address or a URL is the collective's
+         business, and guessing wrong would make a broken link of it. */}}
+    {{ if .Collective.Contact }}<p class="section-note">{{ .T "collective.contact" }} {{ .Collective.Contact }}</p>{{ end }}
+
+    <h2>{{ .T "collective.topics" }}</h2>
+    {{ if .Topics }}
+    <div class="grid">
+      {{ $page := . }}
+      {{ range .Topics }}{{ template "topic-card" dict "Page" $page "Topic" . }}{{ end }}
+    </div>
+    {{ else }}
+    <p class="empty">{{ .T "topics.empty" }}</p>
+    {{ end }}
+
+    <h2>{{ .T "collective.updates" }}</h2>
+    {{ if .Updates }}
+    <ul class="feed">
+      {{ $page := . }}
+      {{ range .Updates }}{{ template "update-card" dict "Page" $page "Update" . "HideCollective" true }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "feed.empty" }}</p>
+    {{ end }}
+  </div>
+
+  <aside class="split-aside">
+    <h2>{{ .T "collective.actions" }}</h2>
+    {{ if .Actions }}
+    <ul class="agenda">
+      {{ $page := . }}
+      {{ range .Actions }}{{ template "action-item" dict "Page" $page "Action" . "HideCollective" true }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "calendar.empty_upcoming" }}</p>
+    {{ end }}
+
+    {{/* Who the collective is made of. Organisations, each with its own logo
+         and its own site — this is the list somebody looks at to decide
+         whether an alliance is who it says it is. */}}
+    {{ if .Collective.Members }}
+    <h2>{{ .T "collective.members" }}</h2>
+    <ul class="members">
+      {{ $page := . }}
+      {{ range .Collective.Members }}
+      <li>
+        {{ if .Website }}<a class="member" href="{{ .Website }}" rel="noopener noreferrer">{{ else }}<div class="member">{{ end }}
+          {{ template "logo" dict "LogoID" .LogoID "Name" .Name }}
+          <span class="member-name">{{ .Name }}</span>
+          <span class="tag">{{ $page.T (printf "member_kind.%s" .Kind) }}</span>
+        {{ if .Website }}</a>{{ else }}</div>{{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ end }}
+  </aside>
+</div>
+{{end}}

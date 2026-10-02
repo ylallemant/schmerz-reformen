@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "collectives.title" }}</h1>
+  <p class="lede">{{ .T "collectives.lede" }}</p>
+</div>
+
+{{ if .Collectives }}
+<div class="grid">
+  {{ $page := . }}
+  {{ range .Collectives }}
+  <article class="card">
+    <div class="profile">
+      {{ template "logo" dict "LogoID" .LogoID "Name" .Name "Small" true }}
+      <div class="profile-body">
+        <div class="card-meta">
+          <span class="tag collective">{{ $page.T "map.layer_collective" }}</span>
+          {{ if .Place }}<span>{{ .Place }}</span>{{ end }}
+        </div>
+        <h2 class="card-title"><a href="/collectives/{{ .Slug }}">{{ .Name }}</a></h2>
+      </div>
+    </div>
+    {{ if .Summary }}<p class="card-text">{{ .Summary }}</p>{{ end }}
+  </article>
+  {{ end }}
+</div>
+{{ else }}
+<p class="empty">{{ .T "collectives.empty" }}</p>
+{{ end }}
+{{end}}

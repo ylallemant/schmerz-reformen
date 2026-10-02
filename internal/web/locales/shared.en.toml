@@ -1,0 +1,88 @@
+# What both web services say the same way: how a date, a time and a sum of
+# money are written, and the names of the things the model enumerates.
+#
+# In one place so the console and the public site cannot disagree about what a
+# "cut" is called. Each service's own catalogue is loaded after this one and
+# may override a key if it ever needs to.
+
+"format.date" = "{{.Weekday}}, {{.Day}} {{.Month}} {{.Year}}"
+"format.date_short" = "{{.Day}} {{.Month}} {{.Year}}"
+"format.time" = "{{.Hour}}:{{.Minute}}"
+"format.datetime" = "{{.Date}}, {{.Time}}"
+"format.money" = "€{{.Value}}"
+"format.money_millions" = "€{{.Value}} million"
+"format.money_billions" = "€{{.Value}} billion"
+"format.decimal_mark" = "."
+"format.thousands_mark" = ","
+
+"weekday.0" = "Sunday"
+"weekday.1" = "Monday"
+"weekday.2" = "Tuesday"
+"weekday.3" = "Wednesday"
+"weekday.4" = "Thursday"
+"weekday.5" = "Friday"
+"weekday.6" = "Saturday"
+
+"weekday_short.0" = "Sun"
+"weekday_short.1" = "Mon"
+"weekday_short.2" = "Tue"
+"weekday_short.3" = "Wed"
+"weekday_short.4" = "Thu"
+"weekday_short.5" = "Fri"
+"weekday_short.6" = "Sat"
+
+"month.1" = "January"
+"month.2" = "February"
+"month.3" = "March"
+"month.4" = "April"
+"month.5" = "May"
+"month.6" = "June"
+"month.7" = "July"
+"month.8" = "August"
+"month.9" = "September"
+"month.10" = "October"
+"month.11" = "November"
+"month.12" = "December"
+
+"month_short.1" = "Jan"
+"month_short.2" = "Feb"
+"month_short.3" = "Mar"
+"month_short.4" = "Apr"
+"month_short.5" = "May"
+"month_short.6" = "Jun"
+"month_short.7" = "Jul"
+"month_short.8" = "Aug"
+"month_short.9" = "Sep"
+"month_short.10" = "Oct"
+"month_short.11" = "Nov"
+"month_short.12" = "Dec"
+
+"kind.cut" = "Cut"
+"kind.reform" = "Reform"
+"kind.closure" = "Closure"
+"kind.privatisation" = "Privatisation"
+"kind.other" = "Other"
+
+"level.federal" = "Federal"
+"level.state" = "State"
+"level.municipal" = "Municipal"
+
+"action_kind.demonstration" = "Demonstration"
+"action_kind.rally" = "Rally"
+"action_kind.strike" = "Strike"
+"action_kind.meeting" = "Meeting"
+"action_kind.info" = "Information event"
+"action_kind.council" = "Council or committee session"
+"action_kind.other" = "Other"
+
+"member_kind.union" = "Trade union"
+"member_kind.party" = "Party"
+"member_kind.association" = "Association"
+"member_kind.initiative" = "Initiative"
+"member_kind.other" = "Other"
+
+"status.draft" = "Draft"
+"status.published" = "Published"
+"status.archived" = "Archived"
+"status.cancelled" = "Cancelled"
+"status.past" = "Past"

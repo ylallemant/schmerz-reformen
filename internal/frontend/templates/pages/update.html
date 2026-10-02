@@ -1,0 +1,24 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/feed">{{ .T "nav.feed" }}</a></li>
+  {{ with .Update.Topic }}<li><a class="link" href="/topics/{{ .ID }}">{{ .Title }}</a></li>{{ end }}
+</ol>
+
+<article class="prose">
+  <div class="card-meta">
+    {{ with .Update.PublishedAt }}<time datetime="{{ $.ISO . }}">{{ $.Date . }}</time>{{ end }}
+    {{ with .Update.Collective }}<a class="link" href="/collectives/{{ .Slug }}">{{ .Name }}</a>{{ end }}
+  </div>
+  <h1>{{ .Update.Title }}</h1>
+  <p class="body-text">{{ .Update.Body }}</p>
+
+  {{ if .Update.SourceURL }}
+  <p class="section-note">{{ .T "topic.source" }}
+    <a class="link" href="{{ .Update.SourceURL }}" rel="noopener noreferrer">{{ .Update.SourceURL }}</a></p>
+  {{ end }}
+
+  {{ with .Update.Topic }}
+  <p><a class="button secondary" href="/topics/{{ .ID }}">{{ $.Tf "update.to_topic" "Topic" .Title }}</a></p>
+  {{ end }}
+</article>
+{{end}}

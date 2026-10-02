@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="heading-row">
+  <h1>{{ .T "home.title" }}</h1>
+  {{ if .Admin }}
+  <a class="button" href="/collectives/new">{{ template "icon-plus" }}{{ .T "home.new" }}</a>
+  {{ end }}
+</div>
+<p class="lede">{{ .T "home.lede" }}</p>
+
+{{ if .Collectives }}
+<div class="grid">
+  {{ $page := . }}
+  {{ range .Collectives }}
+  <article class="card">
+    <div class="card-meta">
+      {{ template "status" dict "Page" $page "Status" .Status }}
+      {{ if .Place }}<span>{{ .Place }}</span>{{ end }}
+    </div>
+    <h2 class="card-title"><a href="/collectives/{{ .ID }}">{{ .Name }}</a></h2>
+    {{ if .Summary }}<p class="card-text">{{ .Summary }}</p>{{ end }}
+    <div class="card-foot">
+      <a class="link" href="/collectives/{{ .ID }}/topics">{{ $page.T "tab.topics" }}</a>
+      <a class="link" href="/collectives/{{ .ID }}/actions">{{ $page.T "tab.actions" }}</a>
+      {{ if .AuthGroup }}<span class="mono" title="{{ $page.T "field.auth_group" }}">{{ .AuthGroup }}</span>{{ end }}
+    </div>
+  </article>
+  {{ end }}
+</div>
+{{ else }}
+{{/* Two different empty states, because they call for two different things:
+     an administrator creates the first collective; anybody else has to be
+     put in a group by somebody who can. */}}
+<p class="empty">{{ if .Admin }}{{ .T "home.empty_admin" }}{{ else }}{{ .T "home.empty" }}{{ end }}</p>
+{{ end }}
+{{end}}

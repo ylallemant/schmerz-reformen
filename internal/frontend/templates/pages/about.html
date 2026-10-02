@@ -1,0 +1,29 @@
+{{define "content"}}
+<div class="prose linked">
+  <h1>{{ .T "about.title" }}</h1>
+  <p class="lede">{{ .T "about.lede" }}</p>
+
+  <h2>{{ .T "about.what_title" }}</h2>
+  <p>{{ .T "about.what" }}</p>
+  <p>{{ .T "about.who" }}</p>
+
+  <h2>{{ .T "about.account_title" }}</h2>
+  <p>{{ .T "about.account" }}</p>
+  <p>{{ .T "about.account_counts" }}</p>
+
+  <h2>{{ .T "about.third_title" }}</h2>
+  <p>{{ .T "about.third" }}</p>
+
+  <h2>{{ .T "about.subscribe_title" }}</h2>
+  <p>{{ .T "about.subscribe" }}</p>
+  <div class="button-row">
+    <a class="button secondary" href="/feed.xml">{{ .T "footer.feed" }}</a>
+    <a class="button secondary" href="/calendar.ics">{{ .T "footer.calendar" }}</a>
+  </div>
+
+  {{ if .ProjectURL }}
+  <h2>{{ .T "about.source_title" }}</h2>
+  <p>{{ .T "about.source" }} <a href="{{ .ProjectURL }}">{{ .ProjectURL }}</a></p>
+  {{ end }}
+</div>
+{{end}}

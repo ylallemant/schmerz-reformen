@@ -1,0 +1,99 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/">{{ .T "nav.collectives" }}</a></li>
+  <li><a class="link" href="/collectives/{{ .Collective.ID }}/actions">{{ .Collective.Name }}</a></li>
+  <li>{{ if .New }}{{ .T "action.new_title" }}{{ else }}{{ .Action.Title }}{{ end }}</li>
+</ol>
+<div class="heading-row">
+  <h1>{{ if .New }}{{ .T "action.new_title" }}{{ else }}{{ .Action.Title }}{{ end }}</h1>
+  {{ if and (not .New) (eq .Action.Status "published") }}
+  <a class="button secondary small" href="{{ .SiteURL }}/actions/{{ .Action.ID }}">{{ .T "button.view_public" }}</a>
+  {{ end }}
+</div>
+{{ if and (not .New) (gt .Action.Participants 0) }}
+<p class="lede">{{ .Tf "action.coming" "Count" .Action.Participants }}</p>
+{{ end }}
+
+<form class="split" method="post" action="{{ if .New }}/collectives/{{ .Collective.ID }}/actions{{ else }}/actions/{{ .Action.ID }}{{ end }}">
+  <div class="prose">
+    <label for="title">{{ .T "field.title" }}</label>
+    <input type="text" id="title" name="title" maxlength="160" required autocomplete="off" value="{{ .Form.Title }}">
+
+    <div class="field-row">
+      <div>
+        <label for="kind">{{ .T "field.kind" }}</label>
+        <select id="kind" name="kind">
+          {{ $page := . }}{{ $kind := .Form.Kind }}
+          {{ range .Kinds }}
+          <option value="{{ . }}"{{ if eq . $kind }} selected{{ end }}>{{ $page.T (printf "action_kind.%s" .) }}</option>
+          {{ end }}
+        </select>
+      </div>
+      <div>
+        <label for="topic_id">{{ .T "field.topic" }}
+          <span class="hint">{{ .T "action.topic_hint" }}</span>
+        </label>
+        <select id="topic_id" name="topic_id">
+          {{ $topic := .Form.TopicID }}
+          <option value="">{{ .T "action.no_topic" }}</option>
+          {{ range .Topics }}
+          <option value="{{ .ID }}"{{ if eq .ID $topic }} selected{{ end }}>{{ .Title }}</option>
+          {{ end }}
+        </select>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div>
+        <label for="starts_at">{{ .T "field.starts_at" }}
+          <span class="hint">{{ .Tf "action.zone_hint" "Zone" .Zone.String }}</span>
+        </label>
+        <input class="datelike" type="datetime-local" id="starts_at" name="starts_at" required value="{{ .Form.StartsAt }}">
+      </div>
+      <div>
+        <label for="ends_at">{{ .T "field.ends_at" }}
+          <span class="hint">{{ .T "action.ends_hint" }}</span>
+        </label>
+        <input class="datelike" type="datetime-local" id="ends_at" name="ends_at" value="{{ .Form.EndsAt }}">
+      </div>
+    </div>
+
+    <label for="description">{{ .T "field.description" }}</label>
+    <textarea id="description" name="description" maxlength="20000">{{ .Form.Description }}</textarea>
+
+    <label for="external_url">{{ .T "field.external_url" }}
+      <span class="hint">{{ .T "action.external_hint" }}</span>
+    </label>
+    <input type="url" id="external_url" name="external_url" maxlength="500" placeholder="https://" value="{{ .Form.ExternalURL }}">
+
+    {{ template "status-field" dict "Page" . "Statuses" .Statuses "Current" .Form.Status }}
+
+    {{/* Called off, not deleted. People put it in their calendars and told
+         their colleagues; it has to say "cancelled" everywhere it used to
+         appear rather than vanish. */}}
+    {{ if not .New }}
+    <label class="checkbox">
+      <input type="checkbox" name="cancelled" value="1"{{ if .Form.Cancelled }} checked{{ end }}>
+      <span><strong>{{ .T "action.cancelled" }}</strong><br>
+        <span class="hint">{{ .T "action.cancelled_hint" }}</span></span>
+    </label>
+    {{ end }}
+
+    <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
+  </div>
+
+  <div class="split-aside">
+    {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "action.place_hint" }}
+  </div>
+</form>
+
+{{ if not .New }}
+<form method="post" action="/actions/{{ .Action.ID }}/delete" data-confirm="{{ .T "action.delete_confirm" }}">
+  <fieldset class="danger-zone">
+    <legend>{{ .T "action.delete_legend" }}</legend>
+    <p>{{ .T "action.delete_warning" }}</p>
+    <button class="button danger" type="submit">{{ .T "action.delete" }}</button>
+  </fieldset>
+</form>
+{{ end }}
+{{end}}

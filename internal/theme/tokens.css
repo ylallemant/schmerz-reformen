@@ -1,0 +1,173 @@
+/*
+ * Violet and blue — the single source of truth for colour.
+ *
+ * Every colour in every service comes from these tokens. Nothing else declares
+ * a raw hex: change a value here and it lands everywhere, and an uploaded
+ * theme file overrides these same names.
+ *
+ * One family, two registers: the light mode is set in the lighter violets and
+ * blues, the dark mode in the darker ones. The hue does not change between
+ * them — a reader who switches mode should recognise the same site, with the
+ * lights turned down.
+ *
+ * Values are literal hex rather than aliases of one another, because this
+ * block is also what gets exported to a designer as a DTCG document — a
+ * var(--something) would be useless in Figma.
+ *
+ * Three theme states, as the layout's pre-paint script expects:
+ *   :root                                      light, the complete set
+ *   @media dark + :root:not([data-theme=light])  dark, following the OS
+ *   :root[data-theme="dark"]                   dark, chosen explicitly
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces — a page tinted towards the violet, cards in plain white on it */
+  --bg: #f5f4fd;
+  --surface: #ffffff;
+  --border: #d8d5ef;
+
+  /* Text — an ink that is nearly black and unmistakably indigo */
+  --text: #1c1a3a;
+  --text-muted: #5d5a85;
+
+  /* The accent: links, buttons, focus, the active tab.
+     --on-accent is what sits on top of it. */
+  --accent: #5a48d8;
+  --accent-deep: #4636b8;
+  --on-accent: #ffffff;
+
+  /* The masthead band. A token of its own rather than the accent, because the
+     two part ways in the dark: there the accent has to be light enough to read
+     as a link on a dark page, and a band that light would be a floodlight. */
+  --band: #6c5ce7;
+  --on-band: #ffffff;
+
+  /* The stripe under the masthead runs from violet into blue */
+  --stripe-from: #8b7cf6;
+  --stripe-to: #3b82f6;
+
+  /* What is drawn on the map and in the calendar: one colour per kind of
+     thing, all inside the family. Shape carries the same distinction — see the
+     markers in base.css — so nobody has to tell violet from blue to read it. */
+  --mark-topic: #7c3aed;
+  --mark-action: #2563eb;
+  --mark-collective: #312e81;
+  --on-mark: #ffffff;
+
+  /* The ground an uploaded logo sits on. Light in both modes, and that is the
+     point of it having a token: most logos were drawn for white paper, and on
+     a dark surface half of them disappear. */
+  --logo-ground: #ffffff;
+
+  /* Status */
+  --error: #b3261e;
+  --warn: #8a6100;
+  --good: #1f6b3a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #100e24;
+    --surface: #1a1738;
+    --border: #37336a;
+    --text: #eeecff;
+    --text-muted: #a39fd0;
+    --accent: #a99cff;
+    --accent-deep: #c3baff;
+    --on-accent: #14112e;
+    --band: #2a2270;
+    --on-band: #eeecff;
+    --stripe-from: #5b4bc4;
+    --stripe-to: #1d4ed8;
+    --mark-topic: #a78bfa;
+    --mark-action: #60a5fa;
+    --mark-collective: #c7d2fe;
+    --on-mark: #14112e;
+    --logo-ground: #f1efff;
+    --error: #ff8a80;
+    --warn: #ffc65c;
+    --good: #7ddb9e;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #100e24;
+  --surface: #1a1738;
+  --border: #37336a;
+  --text: #eeecff;
+  --text-muted: #a39fd0;
+  --accent: #a99cff;
+  --accent-deep: #c3baff;
+  --on-accent: #14112e;
+  --band: #2a2270;
+  --on-band: #eeecff;
+  --stripe-from: #5b4bc4;
+  --stripe-to: #1d4ed8;
+  --mark-topic: #a78bfa;
+  --mark-action: #60a5fa;
+  --mark-collective: #c7d2fe;
+  --on-mark: #14112e;
+  --logo-ground: #f1efff;
+  --error: #ff8a80;
+  --warn: #ffc65c;
+  --good: #7ddb9e;
+}
+
+/* Structure.
+ *
+ * These live in their own block, after the palette, for two reasons: the
+ * colour parser and the DTCG colour export must see colours only, and
+ * structure does not vary between light and dark. A palette has two modes; a
+ * corner radius has one value.
+ *
+ * Palette and structure are selected independently, so a designer can work on
+ * one without touching the other. */
+:root {
+  /* Shape */
+  --radius: 8px;
+  --border-width: 1px;
+
+  /* Rhythm */
+  --space-xs: 0.375rem;
+  --space-sm: 0.75rem;
+  --space-md: 1rem;
+  --space-lg: 2rem;
+
+  /* Density */
+  --card-padding-y: 1rem;
+  --card-padding-x: 1.125rem;
+  --grid-min: 300px;
+  --measure: 68ch;
+
+  /* The page container. Wide, because the width is what lets the map sit
+     beside the feed rather than a screen above it — the two are read together
+     or not at all — and still bounded, because a line of text stretched across
+     an ultrawide monitor is not a line anybody reads.
+
+     One number, used by the masthead, the navigation, the body and the footer
+     alike. */
+  --page: 1440px;
+
+  /* The gutter between the content and the edge of the window.
+   *
+   * It grows with the window rather than being a fixed 20px. A container that
+   * merely centres itself does nothing until the window is wider than it is —
+   * below that the content sits flush against both edges, which reads as a
+   * page pinned to the glass rather than one laid out on it.
+   *
+   * Floored at 1.25rem so a phone keeps a thumb's worth of margin, capped so
+   * a very wide window does not spend half itself on nothing.
+   */
+  --gutter: clamp(1.25rem, 4vw, 3.5rem);
+
+  /* Type */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-size: 16px;
+  --line-height: 1.6;
+  --title-weight: 800;
+  --title-tracking: -0.02em;
+}

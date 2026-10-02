@@ -1,0 +1,74 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/calendar">{{ .T "nav.calendar" }}</a></li>
+  {{ with .Action.Collective }}<li><a class="link" href="/collectives/{{ .Slug }}">{{ .Name }}</a></li>{{ end }}
+</ol>
+
+<div class="split">
+  <article class="prose{{ if .Action.Cancelled }} cancelled{{ end }}">
+    <div class="card-meta">
+      <span class="tag action">{{ .T (printf "action_kind.%s" .Action.Kind) }}</span>
+      {{ if .Action.Cancelled }}<span class="pill alert">{{ .T "status.cancelled" }}</span>{{ end }}
+    </div>
+    <h1>{{ .Action.Title }}</h1>
+
+    {{/* Said first and in full, before anything else on the page: somebody
+         who arrives here from a calendar entry made last week has to learn
+         it is off before they read where to go. */}}
+    {{ if .Action.Cancelled }}<p class="form-error" role="alert">{{ .T "action.cancelled_notice" }}</p>{{ end }}
+
+    <dl class="facts">
+      <dt>{{ .T "action.when" }}</dt>
+      <dd><time datetime="{{ .ISO .Action.StartsAt }}">{{ .DateTime .Action.StartsAt }}</time>
+        {{ with .Action.EndsAt }}– {{ $.Time . }}{{ end }}</dd>
+      {{ if .Action.Place }}
+      <dt>{{ .T "action.where" }}</dt>
+      <dd>{{ .Action.Place }}</dd>
+      {{ end }}
+      {{ with .Action.Collective }}
+      <dt>{{ $.T "action.who" }}</dt>
+      <dd><a class="link" href="/collectives/{{ .Slug }}">{{ .Name }}</a></dd>
+      {{ end }}
+      {{ with .Action.Topic }}
+      <dt>{{ $.T "action.about" }}</dt>
+      <dd><a class="link" href="/topics/{{ .ID }}">{{ .Title }}</a></dd>
+      {{ end }}
+    </dl>
+
+    <div class="actions-row">
+      {{/* An intent, not a registration. Not offered for something that is
+           off or already under way: the button would be a promise about a
+           thing that is no longer on offer.
+
+           Two paths rather than one toggle, each written out whole, so a
+           page left open in another tab cannot undo the press made here. */}}
+      {{ if and (not .Action.Cancelled) (not .Past) }}
+      <form method="post" action="{{ if .Action.Participating }}/actions/{{ .Action.ID }}/withdraw{{ else }}/actions/{{ .Action.ID }}/attend{{ end }}">
+        <input type="hidden" name="next" value="{{ .Next }}">
+        <button class="button{{ if .Action.Participating }} active{{ end }}" type="submit"
+                title="{{ if .Action.Participating }}{{ .T "attend.withdraw_hint" }}{{ else }}{{ .T "attend.hint" }}{{ end }}">
+          {{ if .Action.Participating }}{{ .T "attend.coming" }}{{ else }}{{ .T "attend.attend" }}{{ end }}
+        </button>
+      </form>
+      {{ end }}
+      <a class="button secondary" href="/actions/{{ .Action.ID }}/calendar.ics">{{ .T "action.add_to_calendar" }}</a>
+      {{ if .Action.ExternalURL }}
+      <a class="button secondary" href="{{ .Action.ExternalURL }}" rel="noopener noreferrer">{{ .T "action.external" }}</a>
+      {{ end }}
+    </div>
+    {{/* A count of accounts that said so, never a list of them. */}}
+    {{ if .Action.Participants }}
+    <p class="section-note">{{ .Tf "attend.count" "Count" (.Count .Action.Participants) }}</p>
+    {{ end }}
+
+    {{ if .Action.Description }}<p class="body-text">{{ .Action.Description }}</p>{{ end }}
+  </article>
+
+  <aside class="split-aside">
+    {{ if .UsesMap }}
+    <div class="map small" data-latitude="{{ .Action.Latitude }}" data-longitude="{{ .Action.Longitude }}"
+         data-layer="action" data-attribution="{{ .T "map.attribution" }}"></div>
+    {{ end }}
+  </aside>
+</div>
+{{end}}

@@ -1,0 +1,46 @@
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# editors
+.idea/
+.vscode/
+.history/
+
+# secret protection
+**/*.env
+
+# Working notes, local checkers and anything else that is one person's.
+.local/
+
+# Build output directories
+bin/
+dist/
+
+# Go vendor directory — use go.sum and the module proxy instead.
+#
+# Third-party *browser* assets are a different thing and live in
+# `internal/web/thirdparty/`, which is tracked: they are embedded into the
+# binaries and neither site works without them. That directory is deliberately
+# not called `vendor/`, because this rule would swallow it silently — the build
+# would work locally and fail for everybody else.
+vendor/
+
+# Development SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Locally built service binaries
+/backend
+/console
+/frontend
+
+# Where the backend keeps uploads when run with its default --storage-url
+/storage/
+
+# Test output
+coverage.out
+
+# Local run artifacts (logs, databases, uploads) — one directory per launch
+test/run/

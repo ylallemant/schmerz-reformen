@@ -1,0 +1,88 @@
+# What both web services say the same way: how a date, a time and a sum of
+# money are written, and the names of the things the model enumerates.
+#
+# In one place so the console and the public site cannot disagree about what a
+# "Kürzung" is called. Each service's own catalogue is loaded after this one
+# and may override a key if it ever needs to.
+
+"format.date" = "{{.Weekday}}, {{.Day}}. {{.Month}} {{.Year}}"
+"format.date_short" = "{{.Day}}. {{.Month}} {{.Year}}"
+"format.time" = "{{.Hour}}:{{.Minute}} Uhr"
+"format.datetime" = "{{.Date}}, {{.Time}}"
+"format.money" = "{{.Value}} €"
+"format.money_millions" = "{{.Value}} Mio. €"
+"format.money_billions" = "{{.Value}} Mrd. €"
+"format.decimal_mark" = ","
+"format.thousands_mark" = "."
+
+"weekday.0" = "Sonntag"
+"weekday.1" = "Montag"
+"weekday.2" = "Dienstag"
+"weekday.3" = "Mittwoch"
+"weekday.4" = "Donnerstag"
+"weekday.5" = "Freitag"
+"weekday.6" = "Samstag"
+
+"weekday_short.0" = "So"
+"weekday_short.1" = "Mo"
+"weekday_short.2" = "Di"
+"weekday_short.3" = "Mi"
+"weekday_short.4" = "Do"
+"weekday_short.5" = "Fr"
+"weekday_short.6" = "Sa"
+
+"month.1" = "Januar"
+"month.2" = "Februar"
+"month.3" = "März"
+"month.4" = "April"
+"month.5" = "Mai"
+"month.6" = "Juni"
+"month.7" = "Juli"
+"month.8" = "August"
+"month.9" = "September"
+"month.10" = "Oktober"
+"month.11" = "November"
+"month.12" = "Dezember"
+
+"month_short.1" = "Jan"
+"month_short.2" = "Feb"
+"month_short.3" = "Mär"
+"month_short.4" = "Apr"
+"month_short.5" = "Mai"
+"month_short.6" = "Jun"
+"month_short.7" = "Jul"
+"month_short.8" = "Aug"
+"month_short.9" = "Sep"
+"month_short.10" = "Okt"
+"month_short.11" = "Nov"
+"month_short.12" = "Dez"
+
+"kind.cut" = "Kürzung"
+"kind.reform" = "Reform"
+"kind.closure" = "Schließung"
+"kind.privatisation" = "Privatisierung"
+"kind.other" = "Sonstiges"
+
+"level.federal" = "Bund"
+"level.state" = "Land"
+"level.municipal" = "Kommune"
+
+"action_kind.demonstration" = "Demonstration"
+"action_kind.rally" = "Kundgebung"
+"action_kind.strike" = "Streik"
+"action_kind.meeting" = "Treffen"
+"action_kind.info" = "Infoveranstaltung"
+"action_kind.council" = "Rats- oder Ausschusssitzung"
+"action_kind.other" = "Sonstiges"
+
+"member_kind.union" = "Gewerkschaft"
+"member_kind.party" = "Partei"
+"member_kind.association" = "Verband oder Verein"
+"member_kind.initiative" = "Initiative"
+"member_kind.other" = "Sonstige"
+
+"status.draft" = "Entwurf"
+"status.published" = "Veröffentlicht"
+"status.archived" = "Archiviert"
+"status.cancelled" = "Abgesagt"
+"status.past" = "Vorbei"

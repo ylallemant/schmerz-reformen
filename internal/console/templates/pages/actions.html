@@ -1,0 +1,44 @@
+{{define "content"}}
+{{ template "collective-tabs" dict "Page" . "Collective" .Collective "Tab" "actions" }}
+<div class="heading-row">
+  <h1>{{ .T "actions.title" }}</h1>
+  <a class="button" href="/collectives/{{ .Collective.ID }}/actions/new">{{ template "icon-plus" }}{{ .T "actions.new" }}</a>
+</div>
+<p class="lede">{{ .T "actions.lede" }}</p>
+
+{{ if .Actions }}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "field.starts_at" }}</th>
+        <th scope="col">{{ .T "field.title" }}</th>
+        <th scope="col">{{ .T "field.kind" }}</th>
+        <th scope="col">{{ .T "field.place" }}</th>
+        <th scope="col">{{ .T "actions.coming" }}</th>
+        <th scope="col">{{ .T "field.status" }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ $page := . }}
+      {{ range .Actions }}
+      <tr{{ if .Cancelled }} class="cancelled"{{ end }}>
+        <td><time datetime="{{ $page.ISO .StartsAt }}">{{ $page.ShortDate .StartsAt }}, {{ $page.Time .StartsAt }}</time></td>
+        <td><a class="link" href="/actions/{{ .ID }}">{{ .Title }}</a></td>
+        <td>{{ $page.T (printf "action_kind.%s" .Kind) }}</td>
+        <td>{{ .Place }}</td>
+        <td>{{ .Participants }}</td>
+        <td>
+          {{ if .Cancelled }}<span class="pill alert">{{ $page.T "status.cancelled" }}</span>
+          {{ else if .StartsAt.Before $page.Now }}<span class="pill">{{ $page.T "status.past" }}</span>
+          {{ else }}{{ template "status" dict "Page" $page "Status" .Status }}{{ end }}
+        </td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ else }}
+<p class="empty">{{ .T "actions.empty" }}</p>
+{{ end }}
+{{end}}

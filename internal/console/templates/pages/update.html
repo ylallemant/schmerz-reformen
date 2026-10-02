@@ -1,0 +1,42 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/">{{ .T "nav.collectives" }}</a></li>
+  <li><a class="link" href="/topics/{{ .Topic.ID }}#updates">{{ .Topic.Title }}</a></li>
+  <li>{{ if .New }}{{ .T "update.new_title" }}{{ else }}{{ .Update.Title }}{{ end }}</li>
+</ol>
+<div class="heading-row">
+  <h1>{{ if .New }}{{ .T "update.new_title" }}{{ else }}{{ .Update.Title }}{{ end }}</h1>
+  {{ if and (not .New) (eq .Update.Status "published") }}
+  <a class="button secondary small" href="{{ .SiteURL }}/updates/{{ .Update.ID }}">{{ .T "button.view_public" }}</a>
+  {{ end }}
+</div>
+<p class="lede">{{ .T "update.lede" }}</p>
+
+<form class="prose" method="post" action="{{ if .New }}/topics/{{ .Topic.ID }}/updates{{ else }}/updates/{{ .Update.ID }}{{ end }}">
+  <label for="title">{{ .T "field.title" }}</label>
+  <input type="text" id="title" name="title" maxlength="160" required autocomplete="off" value="{{ .Form.Title }}">
+
+  <label for="body">{{ .T "field.body" }}</label>
+  <textarea id="body" name="body" maxlength="20000" required>{{ .Form.Body }}</textarea>
+
+  <label for="source_url">{{ .T "field.source" }}
+    <span class="hint">{{ .T "update.source_hint" }}</span>
+  </label>
+  <input type="url" id="source_url" name="source_url" maxlength="500" placeholder="https://" value="{{ .Form.SourceURL }}">
+
+  {{ template "status-field" dict "Page" . "Statuses" .Statuses "Current" .Form.Status }}
+  <p class="hint">{{ .T "update.publish_hint" }}</p>
+
+  <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
+</form>
+
+{{ if not .New }}
+<form method="post" action="/updates/{{ .Update.ID }}/delete" data-confirm="{{ .T "update.delete_confirm" }}">
+  <fieldset class="danger-zone">
+    <legend>{{ .T "update.delete_legend" }}</legend>
+    <p>{{ .T "update.delete_warning" }}</p>
+    <button class="button danger" type="submit">{{ .T "update.delete" }}</button>
+  </fieldset>
+</form>
+{{ end }}
+{{end}}

@@ -1,0 +1,84 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "landing.heading" }}</h1>
+  <p class="lede">{{ .T "landing.lede" }}</p>
+</div>
+
+{{/* The counts are of everything, whatever the map below is showing: one cut
+     is a misfortune and four hundred on one map are a policy, so the number
+     is the argument and must not shrink with a viewport. */}}
+<ul class="stats">
+  {{ if .Totals.Amount }}
+  <li>
+    <span class="stat-value">{{ .Loss .Totals.Amount }}</span>
+    {{/* Said beside the figure rather than in a footnote: it is a sum of what
+         collectives documented here, not an audited total. */}}
+    <span class="stat-label">{{ .T "landing.stat_amount" }}</span>
+  </li>
+  {{ end }}
+  <li>
+    <span class="stat-value">{{ .Count .Totals.Topics }}</span>
+    <span class="stat-label">{{ .T "landing.stat_topics" }}</span>
+  </li>
+  <li>
+    <span class="stat-value">{{ .Count .Totals.Actions }}</span>
+    <span class="stat-label">{{ .T "landing.stat_actions" }}</span>
+  </li>
+  <li>
+    <span class="stat-value">{{ .Count .Totals.Collectives }}</span>
+    <span class="stat-label">{{ .T "landing.stat_collectives" }}</span>
+  </li>
+</ul>
+
+<div class="stage">
+  <section aria-label="{{ .T "nav.map" }}">
+    {{/* Which of the three kinds of thing are drawn. Checkboxes, so each
+         works with the keyboard and says what it is to a screen reader; the
+         chip around each is what is seen. Each carries its marker's shape,
+         because the shape — not the colour — is what tells them apart. */}}
+    <div class="filters" id="map-layers">
+      <label class="chip"><input type="checkbox" value="topic" checked>
+        <span class="pin topic legend" aria-hidden="true"></span>{{ .T "map.layer_topics" }}</label>
+      <label class="chip"><input type="checkbox" value="action" checked>
+        <span class="pin action legend" aria-hidden="true"></span>{{ .T "map.layer_actions" }}</label>
+      <label class="chip"><input type="checkbox" value="collective" checked>
+        <span class="pin collective legend" aria-hidden="true"></span>{{ .T "map.layer_collectives" }}</label>
+    </div>
+
+    <div id="map" class="map" data-endpoint="/api/map"
+         data-attribution="{{ .T "map.attribution" }}"
+         data-cancelled="{{ .T "status.cancelled" }}"
+         data-failed="{{ .T "map.unavailable" }}"></div>
+    <p id="map-status" class="map-status" role="status" aria-live="polite"></p>
+    <noscript><p class="section-note">{{ .T "map.noscript" }}</p></noscript>
+  </section>
+
+  <aside class="stage-side">
+    <div class="heading-row">
+      <h2>{{ .T "landing.next_actions" }}</h2>
+      <a class="link" href="/calendar">{{ .T "landing.all_actions" }}</a>
+    </div>
+    {{ if .Actions }}
+    <ul class="agenda">
+      {{ $page := . }}
+      {{ range .Actions }}{{ template "action-item" dict "Page" $page "Action" . }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "calendar.empty_upcoming" }}</p>
+    {{ end }}
+
+    <div class="heading-row">
+      <h2>{{ .T "landing.latest_updates" }}</h2>
+      <a class="link" href="/feed">{{ .T "landing.all_updates" }}</a>
+    </div>
+    {{ if .Updates }}
+    <ul class="feed">
+      {{ $page := . }}
+      {{ range .Updates }}{{ template "update-card" dict "Page" $page "Update" . }}{{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "feed.empty" }}</p>
+    {{ end }}
+  </aside>
+</div>
+{{end}}

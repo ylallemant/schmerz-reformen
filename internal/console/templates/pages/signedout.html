@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="prose">
+  {{ if .Failed }}
+  <h1>{{ .T "auth.failed_title" }}</h1>
+  <p class="lede">{{ .T "auth.failed" }}</p>
+  {{ else }}
+  <h1>{{ .T "auth.signed_out_title" }}</h1>
+  <p class="lede">{{ .T "auth.signed_out" }}</p>
+  {{/* Said because the consequence otherwise looks like a bug: the next
+       sign-in goes straight through without asking for a password. */}}
+  <p class="section-note">{{ .T "auth.provider_session" }}</p>
+  {{ end }}
+  <p><a class="button" href="/auth/login">{{ .T "auth.sign_in" }}</a></p>
+</div>
+{{end}}

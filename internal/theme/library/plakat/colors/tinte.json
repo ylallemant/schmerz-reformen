@@ -1,0 +1,166 @@
+{
+  "light": {
+    "bg": {
+      "$type": "color",
+      "$value": "#f3f6fd"
+    },
+    "surface": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "border": {
+      "$type": "color",
+      "$value": "#cdd6ee"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "#0f1a3a"
+    },
+    "text-muted": {
+      "$type": "color",
+      "$value": "#4f5d85"
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "#1d4ed8"
+    },
+    "accent-deep": {
+      "$type": "color",
+      "$value": "#1e3fae"
+    },
+    "on-accent": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "band": {
+      "$type": "color",
+      "$value": "#1e40af"
+    },
+    "on-band": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "stripe-from": {
+      "$type": "color",
+      "$value": "#6366f1"
+    },
+    "stripe-to": {
+      "$type": "color",
+      "$value": "#0ea5e9"
+    },
+    "mark-topic": {
+      "$type": "color",
+      "$value": "#6d28d9"
+    },
+    "mark-action": {
+      "$type": "color",
+      "$value": "#1d4ed8"
+    },
+    "mark-collective": {
+      "$type": "color",
+      "$value": "#1e293b"
+    },
+    "on-mark": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "logo-ground": {
+      "$type": "color",
+      "$value": "#ffffff"
+    },
+    "error": {
+      "$type": "color",
+      "$value": "#b3261e"
+    },
+    "warn": {
+      "$type": "color",
+      "$value": "#8a6100"
+    },
+    "good": {
+      "$type": "color",
+      "$value": "#1f6b3a"
+    }
+  },
+  "dark": {
+    "bg": {
+      "$type": "color",
+      "$value": "#0a1024"
+    },
+    "surface": {
+      "$type": "color",
+      "$value": "#121a36"
+    },
+    "border": {
+      "$type": "color",
+      "$value": "#2a3766"
+    },
+    "text": {
+      "$type": "color",
+      "$value": "#e8eeff"
+    },
+    "text-muted": {
+      "$type": "color",
+      "$value": "#9aa8d6"
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "#8fb0ff"
+    },
+    "accent-deep": {
+      "$type": "color",
+      "$value": "#b3c9ff"
+    },
+    "on-accent": {
+      "$type": "color",
+      "$value": "#0a1024"
+    },
+    "band": {
+      "$type": "color",
+      "$value": "#152a6e"
+    },
+    "on-band": {
+      "$type": "color",
+      "$value": "#e8eeff"
+    },
+    "stripe-from": {
+      "$type": "color",
+      "$value": "#4338ca"
+    },
+    "stripe-to": {
+      "$type": "color",
+      "$value": "#0369a1"
+    },
+    "mark-topic": {
+      "$type": "color",
+      "$value": "#b197fc"
+    },
+    "mark-action": {
+      "$type": "color",
+      "$value": "#74a7ff"
+    },
+    "mark-collective": {
+      "$type": "color",
+      "$value": "#cbd5f5"
+    },
+    "on-mark": {
+      "$type": "color",
+      "$value": "#0a1024"
+    },
+    "logo-ground": {
+      "$type": "color",
+      "$value": "#eef2ff"
+    },
+    "error": {
+      "$type": "color",
+      "$value": "#ff8a80"
+    },
+    "warn": {
+      "$type": "color",
+      "$value": "#ffc65c"
+    },
+    "good": {
+      "$type": "color",
+      "$value": "#7ddb9e"
+    }
+  }
+}
