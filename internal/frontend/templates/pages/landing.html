@@ -30,30 +30,33 @@
   </li>
 </ul>
 
-<div class="stage">
-  <section aria-label="{{ .T "nav.map" }}">
-    {{/* Which of the three kinds of thing are drawn. Checkboxes, so each
-         works with the keyboard and says what it is to a screen reader; the
-         chip around each is what is seen. Each carries its marker's shape,
-         because the shape — not the colour — is what tells them apart. */}}
-    <div class="filters" id="map-layers">
-      <label class="chip"><input type="checkbox" value="topic" checked>
-        <span class="pin topic legend" aria-hidden="true"></span>{{ .T "map.layer_topics" }}</label>
-      <label class="chip"><input type="checkbox" value="action" checked>
-        <span class="pin action legend" aria-hidden="true"></span>{{ .T "map.layer_actions" }}</label>
-      <label class="chip"><input type="checkbox" value="collective" checked>
-        <span class="pin collective legend" aria-hidden="true"></span>{{ .T "map.layer_collectives" }}</label>
-    </div>
+<section aria-label="{{ .T "nav.map" }}">
+  {{/* Which of the three kinds of thing are drawn. Checkboxes, so each works
+       with the keyboard and says what it is to a screen reader; the chip
+       around each is what is seen. Each carries its marker's shape, because
+       the shape — not the colour — is what tells them apart. */}}
+  <div class="filters" id="map-layers">
+    <label class="chip"><input type="checkbox" value="topic" checked>
+      <span class="pin topic legend" aria-hidden="true"></span>{{ .T "map.layer_topics" }}</label>
+    <label class="chip"><input type="checkbox" value="action" checked>
+      <span class="pin action legend" aria-hidden="true"></span>{{ .T "map.layer_actions" }}</label>
+    <label class="chip"><input type="checkbox" value="collective" checked>
+      <span class="pin collective legend" aria-hidden="true"></span>{{ .T "map.layer_collectives" }}</label>
+  </div>
 
-    <div id="map" class="map" data-endpoint="/api/map"
-         data-attribution="{{ .T "map.attribution" }}"
-         data-cancelled="{{ .T "status.cancelled" }}"
-         data-failed="{{ .T "map.unavailable" }}"></div>
-    <p id="map-status" class="map-status" role="status" aria-live="polite"></p>
-    <noscript><p class="section-note">{{ .T "map.noscript" }}</p></noscript>
-  </section>
+  <div id="map" class="map" data-endpoint="/api/map"
+       data-attribution="{{ .T "map.attribution" }}"
+       data-cancelled="{{ .T "status.cancelled" }}"
+       data-failed="{{ .T "map.unavailable" }}"></div>
+  <p id="map-status" class="map-status" role="status" aria-live="polite"></p>
+  <noscript><p class="section-note">{{ .T "map.noscript" }}</p></noscript>
+</section>
 
-  <aside class="stage-side">
+{{/* Under the map, side by side: what is coming and what has happened. The
+     map takes the whole width because it is the page; the two lists are read
+     after it, and next to each other because they are read together. */}}
+<div class="columns">
+  <section>
     <div class="heading-row">
       <h2>{{ .T "landing.next_actions" }}</h2>
       <a class="link" href="/calendar">{{ .T "landing.all_actions" }}</a>
@@ -66,7 +69,9 @@
     {{ else }}
     <p class="empty">{{ .T "calendar.empty_upcoming" }}</p>
     {{ end }}
+  </section>
 
+  <section>
     <div class="heading-row">
       <h2>{{ .T "landing.latest_updates" }}</h2>
       <a class="link" href="/feed">{{ .T "landing.all_updates" }}</a>
@@ -79,6 +84,6 @@
     {{ else }}
     <p class="empty">{{ .T "feed.empty" }}</p>
     {{ end }}
-  </aside>
+  </section>
 </div>
 {{end}}

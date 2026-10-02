@@ -13,13 +13,13 @@
 </div>
 
 {{ if .Updates }}
-<ul class="feed prose">
+<ul class="feed">
   {{ $page := . }}
   {{ range .Updates }}{{ template "update-card" dict "Page" $page "Update" . }}{{ end }}
 </ul>
 
 {{ if or .Newer .Older }}
-<nav class="pagination prose" aria-label="{{ .T "feed.title" }}">
+<nav class="pagination" aria-label="{{ .T "feed.title" }}">
   {{ if .Newer }}<a class="button secondary small" href="/feed?page={{ .Newer }}{{ if .Following }}&amp;following=1{{ end }}">{{ .T "pagination.newer" }}</a>{{ else }}<span></span>{{ end }}
   {{ if .Older }}<a class="button secondary small" href="/feed?page={{ .Older }}{{ if .Following }}&amp;following=1{{ end }}">{{ .T "pagination.older" }}</a>{{ else }}<span></span>{{ end }}
 </nav>

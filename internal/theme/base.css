@@ -279,8 +279,7 @@ main {
    paragraph. */
 .split-aside > h2:first-child,
 .split-aside > label:first-child,
-.split > .prose > label:first-child,
-.stage-side > h2:first-child {
+.split > .prose > label:first-child {
   margin-top: 0;
 }
 
@@ -348,23 +347,22 @@ h3 {
   margin-right: 0.375rem;
 }
 
-/* --- the stage: the map, and what is read beside it ---
+/* --- two equal columns ---
  *
- * The landing page is this and little else. The map takes what the side column
- * leaves, and the side column is a fixed reading width rather than a fraction:
- * a feed set in a column that grows with the window ends up with lines nobody
- * reads, and a map is the one thing here that is better for every pixel.
+ * The landing page puts the calendar and the news side by side under the map.
+ * Equal, because neither is the secondary one; stacked below a tablet's width,
+ * where two columns of cards would each be too narrow to read.
  */
-.stage {
+.columns {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 26rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-lg);
   align-items: start;
-  margin-top: 1.5rem;
+  margin-top: 1rem;
 }
 
-@media (max-width: 1000px) {
-  .stage {
+@media (max-width: 900px) {
+  .columns {
     grid-template-columns: minmax(0, 1fr);
   }
 }
