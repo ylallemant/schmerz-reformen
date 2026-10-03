@@ -52,6 +52,15 @@ Content is published without review. The other half of that bargain is the
 **audit log**: every change made through the console is recorded against the
 name of the person who made it, append-only.
 
+**Organisations are the exception.** A union, a party or an initiative is
+shared by every collective that lists it — one local branch can sit in three
+alliances — so nobody changes one alone. Creating, changing or deleting an
+organisation is a *proposal*, and it takes effect once **three editors other
+than its author** approve it (as many rejections close it). Until then the
+organisation stays exactly as readers know it. A collective's own list — which
+organisations it counts among its members, in which order — is its editors'
+to change directly.
+
 ### Who reads
 
 Reading needs no account. The news is also an **Atom feed** (`/feed.xml`) and
@@ -150,11 +159,33 @@ Each launch writes to its own directory — `test/run/<timestamp>/`, with
 newest. `-latest` carries on with the previous run. Ctrl-C stops all three,
 giving each its full graceful shutdown.
 
-`-seeding` puts in four example collectives with topics, updates and actions.
+`-seeding` puts in example organisations — each proposed and approved by
+three other editors, the way every organisation comes to exist — and four
+example collectives with topics, updates and actions.
 It goes through the API the way the console does, and finishes by registering
 a reader's passkey with a software authenticator — so every seeded run
 exercises the content path and the account path for real. Every organisation
 in the fixtures is invented and says so in its name.
+
+Production runs PostgreSQL, and a schema that works on SQLite does not have to
+work there. Two ways to check against the real engine:
+
+```sh
+# the store and backend tests, each in a throwaway schema of its own (CI does this)
+SCHMERZ_TEST_POSTGRES_DSN='postgres://u:p@localhost:5432/db?sslmode=disable' go test ./...
+
+# the whole stack, with the backend on PostgreSQL — start from an empty database
+go run ./test -seeding -postgres 'postgres://u:p@localhost:5432/db?sslmode=disable'
+```
+
+Models never pin a column type other than `text`; a test enforces it, because
+GORM already picks the right one per engine (`[]byte` is `bytea` on
+PostgreSQL, `blob` on SQLite).
+
+With authentication off everybody is the same stand-in editor, and nobody may
+approve their own proposal — so the local console offers four stand-ins to
+switch between (*Act as 1 2 3 4* in its navigation). Propose as one, approve
+as the other three. Seeding leaves one proposed organisation waiting for a vote.
 
 To see the console as one collective's editor rather than as an administrator,
 copy `test/.env.example` to `test/.env` and set `SCHMERZ_DEVELOPMENT_GROUPS`.
@@ -168,6 +199,7 @@ The settings that matter, each available as a flag, an environment variable
 |---|---|---|
 | `site-url` | all | the public address. **Passkeys are bound to its host for ever.** |
 | `staff-token` | backend, console | the secret that makes the console the console |
+| `organisation-approvals` | backend | approvals a change to an organisation needs from editors other than its author (default 3) |
 | `admin-group` | backend, console | the identity-provider group that administers |
 | `console-url` | console | its own public address; the OIDC redirect is `{console-url}/auth/callback` |
 | `oidc-issuer`, `oidc-client-id`, `oidc-client-secret` | console | the identity provider |

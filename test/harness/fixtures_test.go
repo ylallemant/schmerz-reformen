@@ -18,8 +18,32 @@ func TestTheFixturesAreUsable(t *testing.T) {
 		t.Fatal("the fixtures are empty")
 	}
 
+	// Organisations are listed before anything names them: a parent before
+	// its children, every member before the collectives that list it.
+	organisations := map[string]bool{}
+	for _, organisation := range file.Organisations {
+		if organisation.Name == "" || organisation.Kind == "" {
+			t.Errorf("organisation %q needs a name and a kind", organisation.Name)
+		}
+		if organisations[organisation.Name] {
+			t.Errorf("organisation %q is listed twice", organisation.Name)
+		}
+		if organisation.Parent != "" && !organisations[organisation.Parent] {
+			t.Errorf("%q is part of %q, which is not listed before it", organisation.Name, organisation.Parent)
+		}
+		if !organisation.Pending {
+			organisations[organisation.Name] = true
+		}
+	}
+
 	slugs, groups := map[string]bool{}, map[string]bool{}
 	for _, collective := range file.Collectives {
+		for _, member := range collective.Members {
+			if !organisations[member] {
+				t.Errorf("%q lists %q, which is not an organisation the fixtures create", collective.Name, member)
+			}
+		}
+
 		if collective.Name == "" || collective.Slug == "" || collective.AuthGroup == "" {
 			t.Errorf("collective %q needs a name, an address and a group", collective.Name)
 		}

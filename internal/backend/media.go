@@ -20,7 +20,7 @@ func (a *API) registerMediaRoutes(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/v1/media/{id}",
 		Summary:     "Read an uploaded image",
-		Description: "The logo of a collective or of one of its member organisations. Served " +
+		Description: "The logo of a collective or of an organisation. Served " +
 			"with a policy that neutralises an SVG: an image upload must not be code execution.",
 		Tags: []string{"Media"},
 	}, a.getMedia)
@@ -43,21 +43,6 @@ func (a *API) registerMediaRoutes(api huma.API) {
 		Tags:        []string{"Console"},
 	})), a.staffDeleteCollectiveLogo)
 
-	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
-		OperationID: "staff-put-member-logo",
-		Method:      http.MethodPut,
-		Path:        "/v1/staff/members/{id}/logo",
-		Summary:     "Upload a member organisation's logo",
-		Tags:        []string{"Console"},
-	})), a.staffPutMemberLogo)
-
-	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
-		OperationID: "staff-delete-member-logo",
-		Method:      http.MethodDelete,
-		Path:        "/v1/staff/members/{id}/logo",
-		Summary:     "Remove a member organisation's logo",
-		Tags:        []string{"Console"},
-	})), a.staffDeleteMemberLogo)
 }
 
 // MediaIDInput addresses an uploaded image.
@@ -128,7 +113,9 @@ func normaliseMediaType(contentType string) string {
 // failed write, a row a page links to with nothing behind it; this order
 // leaves at worst a blob nothing refers to, which costs a few kilobytes and
 // breaks no page.
-func (a *API) storeImage(ctx context.Context, collectiveID, contentType string, data []byte) (models.Media, error) {
+//
+// owner says whose the image is: a collective's, or an organisation's.
+func (a *API) storeImage(ctx context.Context, owner models.Media, contentType string, data []byte) (models.Media, error) {
 	mediaType := normaliseMediaType(contentType)
 	extension, ok := models.MediaTypes[mediaType]
 	if !ok {
@@ -146,9 +133,10 @@ func (a *API) storeImage(ctx context.Context, collectiveID, contentType string, 
 	// The key is the identifier and nothing an uploader chose. A filename
 	// somebody else supplied has no business becoming a path.
 	media := models.Media{
-		CollectiveID: collectiveID,
-		ContentType:  mediaType,
-		Size:         len(data),
+		CollectiveID:   owner.CollectiveID,
+		OrganisationID: owner.OrganisationID,
+		ContentType:    mediaType,
+		Size:           len(data),
 	}
 	media.ID = models.NewID()
 	media.Key = "media/" + media.ID + extension
@@ -216,7 +204,7 @@ func (a *API) staffPutCollectiveLogo(ctx context.Context, in *LogoInput) (*LogoO
 		return nil, err
 	}
 
-	media, err := a.storeImage(ctx, collective.ID, in.ContentType, in.RawBody)
+	media, err := a.storeImage(ctx, models.Media{CollectiveID: collective.ID}, in.ContentType, in.RawBody)
 	if err != nil {
 		return nil, err
 	}
@@ -256,52 +244,5 @@ func (a *API) staffDeleteCollectiveLogo(ctx context.Context, in *CollectiveIDInp
 	a.dropMedia(ctx, previous)
 
 	a.audit(ctx, who, models.AuditUpdate, "collective", collective.ID, collective.ID, collective.Name+" (logo removed)")
-	return done(), nil
-}
-
-func (a *API) staffPutMemberLogo(ctx context.Context, in *LogoInput) (*LogoOutput, error) {
-	who, member, err := a.memberFor(ctx, in.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	media, err := a.storeImage(ctx, member.CollectiveID, in.ContentType, in.RawBody)
-	if err != nil {
-		return nil, err
-	}
-
-	previous := member.LogoID
-	member.LogoID = media.ID
-	if err := a.store.SaveMember(ctx, &member); err != nil {
-		log.Error().Err(err).Str("member", member.ID).Msg("cannot attach a logo")
-		a.dropMedia(ctx, media.ID)
-		return nil, huma.Error500InternalServerError("cannot save the logo")
-	}
-	a.dropMedia(ctx, previous)
-
-	a.audit(ctx, who, models.AuditUpdate, "member", member.ID, member.CollectiveID, member.Name+" (logo)")
-	out := &LogoOutput{}
-	out.Body.LogoID = media.ID
-	return out, nil
-}
-
-func (a *API) staffDeleteMemberLogo(ctx context.Context, in *MemberIDInput) (*DoneOutput, error) {
-	who, member, err := a.memberFor(ctx, in.ID)
-	if err != nil {
-		return nil, err
-	}
-	if member.LogoID == "" {
-		return done(), nil
-	}
-
-	previous := member.LogoID
-	member.LogoID = ""
-	if err := a.store.SaveMember(ctx, &member); err != nil {
-		log.Error().Err(err).Str("member", member.ID).Msg("cannot detach a logo")
-		return nil, huma.Error500InternalServerError("cannot remove the logo")
-	}
-	a.dropMedia(ctx, previous)
-
-	a.audit(ctx, who, models.AuditUpdate, "member", member.ID, member.CollectiveID, member.Name+" (logo removed)")
 	return done(), nil
 }

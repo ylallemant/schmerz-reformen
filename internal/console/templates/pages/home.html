@@ -7,6 +7,10 @@
 </div>
 <p class="lede">{{ .T "home.lede" }}</p>
 
+{{ if .Waiting }}
+<p class="form-notice"><a class="link" href="/organisations#pending">{{ .Tf "home.waiting" "Count" .Waiting }}</a></p>
+{{ end }}
+
 {{ if .Collectives }}
 <div class="grid">
   {{ $page := . }}

@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"crypto/rand"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -13,10 +12,11 @@ import (
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
 	"github.com/ylallemant/schmerz-reformen/internal/storage"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
+	"github.com/ylallemant/schmerz-reformen/internal/store/storetest"
 )
 
-// newAPI assembles a backend over a fresh SQLite file and a storage directory
-// of its own.
+// newAPI assembles a backend over a fresh database — SQLite, or PostgreSQL
+// when storetest.PostgresEnv is set — and a storage directory of its own.
 //
 // With a cache, so every test in this package exercises the cached read paths
 // rather than a configuration nothing ships with. Without a geocoder, so no
@@ -24,10 +24,8 @@ import (
 func newAPI(t *testing.T) *API {
 	t.Helper()
 
-	db, err := store.Open(store.Options{
-		Driver: store.DriverSQLite,
-		DSN:    filepath.Join(t.TempDir(), "test.db"),
-	})
+	driver, dsn := storetest.Database(t)
+	db, err := store.Open(store.Options{Driver: store.Driver(driver), DSN: dsn})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -49,6 +47,7 @@ func newAPI(t *testing.T) *API {
 		cache:      cache.New(cache.DefaultTTL, cache.DefaultLimit),
 		phrases:    phrasesFor("de"),
 		adminGroup: config.DefaultAdminGroup,
+		approvals:  config.DefaultOrganisationApprovals,
 		siteURL:    "http://localhost:8401",
 	}
 }

@@ -20,7 +20,6 @@ func (c *console) registerCollectiveRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /collectives/{id}/members", c.localized(c.createMember))
 	mux.Handle("GET /collectives/{id}/members/{member}", c.localized(c.member))
 	mux.Handle("POST /collectives/{id}/members/{member}", c.localized(c.saveMember))
-	mux.Handle("POST /collectives/{id}/members/{member}/logo", c.localized(c.saveMemberLogo))
 	mux.Handle("POST /collectives/{id}/members/{member}/delete", c.localized(c.deleteMember))
 }
 
@@ -28,6 +27,11 @@ func (c *console) registerCollectiveRoutes(mux *http.ServeMux) {
 type homePage struct {
 	page
 	Collectives []apiclient.Collective
+
+	// Waiting is how many changes to organisations wait for this editor's
+	// vote — the one thing on this console that is waiting for them rather
+	// than for their collective.
+	Waiting int
 }
 
 func (c *console) home(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +43,7 @@ func (c *console) home(w http.ResponseWriter, r *http.Request) {
 
 	data := homePage{page: c.newPage(r, "home.title")}
 	data.Collectives = profile.Collectives
+	data.Waiting = profile.Waiting
 	c.renderer.Render(w, http.StatusOK, "home", data)
 }
 
@@ -58,8 +63,11 @@ type collectivePage struct {
 	// New is whether this is the form that creates one.
 	New bool
 
-	Statuses    []string
-	MemberKinds []string
+	Statuses []string
+
+	// Organisations are what the member picker offers. Loaded only for a
+	// collective that exists: the form that creates one has no members yet.
+	Organisations []apiclient.Organisation
 }
 
 func collectiveForm(collective apiclient.Collective) apiclient.CollectiveFields {
@@ -96,7 +104,6 @@ func (c *console) collectiveData(r *http.Request, titleKey string) collectivePag
 	data := collectivePage{page: c.newPage(r, titleKey)}
 	data.UsesMap = true
 	data.Statuses = statuses
-	data.MemberKinds = memberKinds
 	return data
 }
 
@@ -147,9 +154,16 @@ func (c *console) renderCollective(w http.ResponseWriter, r *http.Request, statu
 		return
 	}
 
+	organisations, err := c.staff(r).Organisations(r.Context())
+	if err != nil {
+		c.fail(w, r, err)
+		return
+	}
+
 	data := c.collectiveData(r, "collective.edit_title")
 	data.Collective = collective
 	data.Form = collectiveForm(collective)
+	data.Organisations = availableOrganisations(organisations, collective.Members)
 	if adjust != nil {
 		adjust(&data)
 	}
@@ -247,13 +261,20 @@ func (c *console) deleteCollective(w http.ResponseWriter, r *http.Request) {
 
 // --- member organisations ---
 
-func memberFieldsFrom(r *http.Request) apiclient.MemberFields {
-	return apiclient.MemberFields{
-		Name:     r.FormValue("name"),
-		Kind:     r.FormValue("kind"),
-		Website:  r.FormValue("website"),
-		Position: intField(r, "position"),
+// availableOrganisations are those a collective can still add: every
+// organisation, less the ones already in its list.
+func availableOrganisations(all []apiclient.Organisation, members []apiclient.Member) []apiclient.Organisation {
+	listed := make(map[string]bool, len(members))
+	for _, member := range members {
+		listed[member.OrganisationID] = true
 	}
+	available := make([]apiclient.Organisation, 0, len(all))
+	for _, organisation := range all {
+		if !listed[organisation.ID] {
+			available = append(available, organisation)
+		}
+	}
+	return available
 }
 
 func (c *console) createMember(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +283,8 @@ func (c *console) createMember(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 
-	if _, err := c.staff(r).CreateMember(r.Context(), id, memberFieldsFrom(r)); err != nil {
+	fields := apiclient.MemberFields{OrganisationID: strings.TrimSpace(r.FormValue("organisation_id"))}
+	if _, err := c.staff(r).CreateMember(r.Context(), id, fields); err != nil {
 		if apiclient.IsNotFound(err) {
 			c.fail(w, r, err)
 			return
@@ -275,13 +297,12 @@ func (c *console) createMember(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, "/collectives/"+id+"#members", "saved")
 }
 
-// memberPage edits one member organisation.
+// memberPage is one organisation's place in a collective's list.
 type memberPage struct {
 	page
-	Collective  apiclient.Collective
-	Member      apiclient.Member
-	Form        apiclient.MemberFields
-	MemberKinds []string
+	Collective apiclient.Collective
+	Member     apiclient.Member
+	Position   int
 }
 
 // findMember reads a collective and picks one of its organisations out of it.
@@ -317,10 +338,7 @@ func (c *console) renderMember(w http.ResponseWriter, r *http.Request, status in
 	data := memberPage{page: c.newPage(r, "member.edit_title")}
 	data.Collective = collective
 	data.Member = member
-	data.Form = apiclient.MemberFields{
-		Name: member.Name, Kind: member.Kind, Website: member.Website, Position: member.Position,
-	}
-	data.MemberKinds = memberKinds
+	data.Position = member.Position
 	if adjust != nil {
 		adjust(&data)
 	}
@@ -339,46 +357,16 @@ func (c *console) saveMember(w http.ResponseWriter, r *http.Request) {
 		c.fail(w, r, err)
 		return
 	}
-	fields := memberFieldsFrom(r)
+	position := intField(r, "position")
 
-	if _, err := c.staff(r).SaveMember(r.Context(), member.ID, fields); err != nil {
+	if _, err := c.staff(r).SaveMember(r.Context(), member.ID, apiclient.MemberFields{Position: position}); err != nil {
 		c.renderMember(w, r, http.StatusUnprocessableEntity, func(data *memberPage) {
-			data.Form = fields
+			data.Position = position
 			data.Problem = c.problemOf(data.page, err)
 		})
 		return
 	}
 	redirect(w, r, "/collectives/"+collective.ID+"#members", "saved")
-}
-
-func (c *console) saveMemberLogo(w http.ResponseWriter, r *http.Request) {
-	data, contentType, uploadErr := uploadFrom(w, r, "logo")
-
-	collective, member, err := c.findMember(r)
-	if err != nil {
-		c.fail(w, r, err)
-		return
-	}
-
-	switch {
-	case r.FormValue("remove") != "":
-		err = c.staff(r).DeleteMemberLogo(r.Context(), member.ID)
-	case uploadErr != nil:
-		c.renderMember(w, r, http.StatusUnprocessableEntity, func(data *memberPage) {
-			data.Problem = data.T("error.upload")
-		})
-		return
-	default:
-		err = c.staff(r).UploadMemberLogo(r.Context(), member.ID, contentType, data)
-	}
-
-	if err != nil {
-		c.renderMember(w, r, http.StatusUnprocessableEntity, func(data *memberPage) {
-			data.Problem = c.problemOf(data.page, err)
-		})
-		return
-	}
-	redirect(w, r, "/collectives/"+collective.ID+"/members/"+member.ID, "logo")
 }
 
 func (c *console) deleteMember(w http.ResponseWriter, r *http.Request) {

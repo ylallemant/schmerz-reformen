@@ -1,5 +1,33 @@
 {
   "note": "Example content for a local run. Every organisation here is invented and marked as an example: fixtures must never put words in the mouth of a real union, party or association.",
+  "organisations": [
+    {"name": "Beispiel-Gewerkschaftsbund", "kind": "union", "website": "https://example.org/gewerkschaftsbund",
+     "place": "Berlin", "latitude": 52.5200, "longitude": 13.4050, "zoom": 11},
+    {"name": "Beispielpartei", "kind": "party",
+     "place": "Berlin", "latitude": 52.5163, "longitude": 13.3777, "zoom": 13},
+    {"name": "Beispiel-Gewerkschaft Öffentlicher Dienst", "kind": "union", "website": "https://example.org/gewerkschaft",
+     "parent": "Beispiel-Gewerkschaftsbund",
+     "place": "Düsseldorf", "latitude": 51.2277, "longitude": 6.7735, "zoom": 11},
+    {"name": "Beispiel-Gewerkschaft Erziehung", "kind": "union", "parent": "Beispiel-Gewerkschaftsbund",
+     "place": "Köln", "latitude": 50.9375, "longitude": 6.9603, "zoom": 11},
+    {"name": "Beispielpartei, Kreisverband", "kind": "party", "parent": "Beispielpartei",
+     "place": "Düsseldorf", "latitude": 51.2254, "longitude": 6.7763, "zoom": 13},
+    {"name": "Mieterverein Beispielstadt", "kind": "association",
+     "place": "Düsseldorf", "latitude": 51.2217, "longitude": 6.7762, "zoom": 13},
+    {"name": "Initiative Bäder retten", "kind": "initiative",
+     "place": "Düsseldorf", "latitude": 51.2390, "longitude": 6.7980, "zoom": 13},
+    {"name": "Beispielverband freier Träger", "kind": "association",
+     "place": "Köln", "latitude": 50.9413, "longitude": 6.9583, "zoom": 13},
+    {"name": "Fahrgastverband Beispiel", "kind": "association",
+     "place": "Leipzig", "latitude": 51.3397, "longitude": 12.3731, "zoom": 11},
+    {"name": "Stadtteilinitiative Ost", "kind": "initiative",
+     "place": "Leipzig-Ost", "latitude": 51.3430, "longitude": 12.4100, "zoom": 13},
+    {"name": "Beispiel-Sozialverband", "kind": "association",
+     "place": "Berlin", "latitude": 52.5070, "longitude": 13.3900, "zoom": 13},
+    {"name": "Initiative Beispielkiez", "kind": "initiative",
+     "place": "Düsseldorf-Flingern", "latitude": 51.2290, "longitude": 6.8040, "zoom": 14,
+     "pending": true, "approvals": 1}
+  ],
   "collectives": [
     {
       "name": "Düsseldorfer Bündnis für eine soziale Stadt (Beispiel)",
@@ -10,12 +38,7 @@
       "website": "https://example.org/duesseldorf",
       "contact": "kontakt@example.org",
       "place": "Düsseldorf", "latitude": 51.2277, "longitude": 6.7735, "zoom": 11,
-      "members": [
-        {"name": "Beispiel-Gewerkschaft Öffentlicher Dienst", "kind": "union", "website": "https://example.org/gewerkschaft"},
-        {"name": "Mieterverein Beispielstadt", "kind": "association"},
-        {"name": "Beispielpartei, Kreisverband", "kind": "party"},
-        {"name": "Initiative Bäder retten", "kind": "initiative"}
-      ],
+      "members": ["Beispiel-Gewerkschaft Öffentlicher Dienst", "Mieterverein Beispielstadt", "Beispielpartei, Kreisverband", "Initiative Bäder retten"],
       "topics": [
         {
           "title": "Haushalt 2027: 100 Millionen Euro weniger",
@@ -67,10 +90,7 @@
       "auth_group": "buendnis-koeln",
       "summary": "Beispieldaten: Träger der Jugendhilfe, Gewerkschaften und Elterninitiativen.",
       "place": "Köln", "latitude": 50.9375, "longitude": 6.9603, "zoom": 11,
-      "members": [
-        {"name": "Beispielverband freier Träger", "kind": "association"},
-        {"name": "Beispiel-Gewerkschaft Erziehung", "kind": "union"}
-      ],
+      "members": ["Beispielverband freier Träger", "Beispiel-Gewerkschaft Erziehung"],
       "topics": [
         {
           "title": "Zwölf Millionen weniger für die Jugendhilfe",
@@ -100,10 +120,7 @@
       "auth_group": "buendnis-leipzig",
       "summary": "Beispieldaten: Fahrgastverband, Gewerkschaften und Stadtteilinitiativen.",
       "place": "Leipzig", "latitude": 51.3397, "longitude": 12.3731, "zoom": 11,
-      "members": [
-        {"name": "Fahrgastverband Beispiel", "kind": "association"},
-        {"name": "Stadtteilinitiative Ost", "kind": "initiative"}
-      ],
+      "members": ["Fahrgastverband Beispiel", "Stadtteilinitiative Ost"],
       "topics": [
         {
           "title": "Bus und Bahn fahren seltener",
@@ -129,11 +146,7 @@
       "auth_group": "buendnis-sozialstaat",
       "summary": "Beispieldaten: ein bundesweites Bündnis ohne festen Ort – es hat keinen Punkt auf der Karte.",
       "place": "bundesweit",
-      "members": [
-        {"name": "Beispiel-Sozialverband", "kind": "association"},
-        {"name": "Beispiel-Gewerkschaftsbund", "kind": "union"},
-        {"name": "Beispielpartei", "kind": "party"}
-      ],
+      "members": ["Beispiel-Sozialverband", "Beispiel-Gewerkschaftsbund", "Beispielpartei"],
       "topics": [
         {
           "title": "Umbau des Bürgergelds",

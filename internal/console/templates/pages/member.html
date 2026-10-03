@@ -6,56 +6,30 @@
 </ol>
 <h1>{{ .Member.Name }}</h1>
 
+{{/* What is the collective's own here is where the organisation stands in
+     its list, and whether it is in it at all. The organisation itself is
+     shared, and changed on its own page, by agreement. */}}
 <div class="split">
   <form class="prose" method="post" action="/collectives/{{ .Collective.ID }}/members/{{ .Member.ID }}">
-    <label for="name">{{ .T "field.name" }}</label>
-    <input type="text" id="name" name="name" maxlength="120" required autocomplete="off" value="{{ .Form.Name }}">
-
-    <div class="field-row">
-      <div>
-        <label for="kind">{{ .T "field.kind" }}</label>
-        <select id="kind" name="kind">
-          {{ $page := . }}{{ $current := .Form.Kind }}
-          {{ range .MemberKinds }}
-          <option value="{{ . }}"{{ if eq . $current }} selected{{ end }}>{{ $page.T (printf "member_kind.%s" .) }}</option>
-          {{ end }}
-        </select>
-      </div>
-      <div>
-        <label for="position">{{ .T "field.position" }}
-          <span class="hint">{{ .T "member.position_hint" }}</span>
-        </label>
-        <input type="number" id="position" name="position" min="1" step="1" value="{{ .Form.Position }}">
-      </div>
-    </div>
-
-    <label for="website">{{ .T "field.website" }}</label>
-    <input type="url" id="website" name="website" maxlength="500" placeholder="https://" value="{{ .Form.Website }}">
-
+    <label for="position">{{ .T "field.position" }}
+      <span class="hint">{{ .T "member.position_hint" }}</span>
+    </label>
+    <input type="number" id="position" name="position" min="1" step="1" value="{{ .Position }}">
     <button class="button" type="submit">{{ .T "button.save" }}</button>
   </form>
 
   <aside class="split-aside">
-    <h2>{{ .T "logo.title" }}</h2>
     <div class="profile">
       {{ if .Member.LogoID }}
       <span class="logo-box"><img src="/media/{{ .Member.LogoID }}" alt=""></span>
       {{ else }}
       <span class="logo-box initial" aria-hidden="true">{{ initial .Member.Name }}</span>
       {{ end }}
-      <form class="profile-body" method="post" enctype="multipart/form-data"
-            action="/collectives/{{ .Collective.ID }}/members/{{ .Member.ID }}/logo">
-        <label for="logo">{{ .T "logo.choose" }}
-          <span class="hint">{{ .T "logo.hint" }}</span>
-        </label>
-        <input type="file" id="logo" name="logo" accept="image/svg+xml,image/png,image/webp,image/jpeg,image/gif">
-        <div class="button-row">
-          <button class="button small" type="submit">{{ .T "logo.upload" }}</button>
-          {{ if .Member.LogoID }}
-          <button class="button danger small" type="submit" name="remove" value="1">{{ .T "logo.remove" }}</button>
-          {{ end }}
-        </div>
-      </form>
+      <div class="profile-body">
+        <p>{{ .T (printf "member_kind.%s" .Member.Kind) }}{{ if .Member.Place }} · {{ .Member.Place }}{{ end }}</p>
+        <p class="hint">{{ .T "member.shared_hint" }}</p>
+        <a class="button secondary small" href="/organisations/{{ .Member.OrganisationID }}">{{ .T "member.open_organisation" }}</a>
+      </div>
     </div>
   </aside>
 </div>

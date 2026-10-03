@@ -200,7 +200,7 @@ func (c *console) startSession(w http.ResponseWriter, identity staffauth.Identit
 // keep replaying it would not be a session.
 func (c *console) identityOf(r *http.Request) (staffauth.Identity, bool) {
 	if c.development {
-		return c.developmentIdentity, true
+		return c.standIn(r), true
 	}
 
 	cookie, err := r.Cookie(sessionCookie)

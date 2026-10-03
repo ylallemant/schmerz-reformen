@@ -1,0 +1,108 @@
+{{define "content"}}
+<ol class="crumbs">
+  <li><a class="link" href="/organisations">{{ .T "nav.organisations" }}</a></li>
+  <li>{{ if .New }}{{ .T "organisation.new_title" }}{{ else }}{{ .Organisation.Name }}{{ end }}</li>
+</ol>
+<h1>{{ if .New }}{{ .T "organisation.new_title" }}{{ else }}{{ .Organisation.Name }}{{ end }}</h1>
+
+{{/* Said before the form rather than after it: an editor who expects their
+     change to be live as soon as they press the button will otherwise look
+     at the unchanged page and press it again. */}}
+<p class="lede">{{ if .New }}{{ .T "organisation.new_lede" }}{{ else }}{{ .T "organisation.edit_lede" }}{{ end }}</p>
+
+<div class="split">
+  <form class="prose" method="post" action="{{ if .New }}/organisations{{ else }}/organisations/{{ .Organisation.ID }}{{ end }}">
+    <label for="name">{{ .T "field.name" }}</label>
+    <input type="text" id="name" name="name" maxlength="120" required autocomplete="off" value="{{ .Form.Name }}">
+
+    <div class="field-row">
+      <div>
+        <label for="kind">{{ .T "field.kind" }}</label>
+        <select id="kind" name="kind">
+          {{ $page := . }}{{ $current := .Form.Kind }}
+          {{ range .MemberKinds }}
+          <option value="{{ . }}"{{ if eq . $current }} selected{{ end }}>{{ $page.T (printf "member_kind.%s" .) }}</option>
+          {{ end }}
+        </select>
+      </div>
+      <div>
+        <label for="website">{{ .T "field.website" }}</label>
+        <input type="url" id="website" name="website" maxlength="500" placeholder="https://" value="{{ .Form.Website }}">
+      </div>
+    </div>
+
+    <label for="parent_id">{{ .T "field.parent" }}
+      <span class="hint">{{ .T "organisation.parent_hint" }}</span>
+    </label>
+    {{ template "organisation-picker" dict "Page" . "ID" "parent_id" "Name" "parent_id"
+         "Organisations" .Parents "Selected" .Form.ParentID "Exclude" .Organisation.ID "None" true "Required" false }}
+
+    {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "organisation.place_hint" }}
+
+    <button class="button" type="submit">{{ .T "button.propose" }}</button>
+  </form>
+
+  {{ if not .New }}
+  <aside class="split-aside">
+    <h2>{{ .T "logo.title" }}</h2>
+    <div class="profile">
+      {{ if .Organisation.LogoID }}
+      <span class="logo-box"><img src="/media/{{ .Organisation.LogoID }}" alt=""></span>
+      {{ else }}
+      <span class="logo-box initial" aria-hidden="true">{{ initial .Organisation.Name }}</span>
+      {{ end }}
+      <form class="profile-body" method="post" action="/organisations/{{ .Organisation.ID }}/logo" enctype="multipart/form-data">
+        <label for="logo">{{ .T "logo.choose" }}
+          <span class="hint">{{ .T "organisation.logo_hint" }}</span>
+        </label>
+        <input type="file" id="logo" name="logo" accept="image/svg+xml,image/png,image/webp,image/jpeg,image/gif">
+        <div class="button-row">
+          <button class="button small" type="submit">{{ .T "button.propose" }}</button>
+          {{ if .Organisation.LogoID }}
+          <button class="button danger small" type="submit" name="remove" value="1">{{ .T "organisation.propose_logo_removal" }}</button>
+          {{ end }}
+        </div>
+      </form>
+    </div>
+
+    <h2 id="pending">{{ .T "changes.pending_title" }}</h2>
+    {{ if .Organisation.Pending }}
+    <ul class="plain-list">
+      {{ $page := . }}
+      {{ range .Organisation.Pending }}
+      <li>
+        <a class="link" href="/changes/{{ .ID }}">{{ $page.T (printf "change_kind.%s" .Kind) }}</a>
+        — {{ $page.Tf "changes.tally" "Approvals" .Approvals "Rejections" .Rejections "Needed" .Needed }}
+        {{ if .CanVote }}<span class="pill">{{ $page.T "changes.your_turn" }}</span>{{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "organisation.nothing_pending" }}</p>
+    {{ end }}
+
+    <h2>{{ .T "organisation.member_of" }}</h2>
+    {{ if .Organisation.Collectives }}
+    <ul class="plain-list">
+      {{ range .Organisation.Collectives }}
+      <li>{{ .Name }}</li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "organisation.member_of_none" }}</p>
+    {{ end }}
+  </aside>
+  {{ end }}
+</div>
+
+{{ if not .New }}
+<form method="post" action="/organisations/{{ .Organisation.ID }}/delete"
+      data-confirm="{{ .T "organisation.delete_confirm" }}">
+  <fieldset class="danger-zone">
+    <legend>{{ .T "organisation.delete_legend" }}</legend>
+    <p>{{ .T "organisation.delete_warning" }}</p>
+    <button class="button danger" type="submit">{{ .T "organisation.delete" }}</button>
+  </fieldset>
+</form>
+{{ end }}
+{{end}}

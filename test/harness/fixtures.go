@@ -40,11 +40,22 @@ type SeedPlace struct {
 	Zoom      int     `json:"zoom"`
 }
 
-// SeedMember is one organisation in a collective.
-type SeedMember struct {
+// SeedOrganisation is one organisation, put in the way every organisation
+// comes to exist: proposed by one editor and approved by three others.
+type SeedOrganisation struct {
 	Name    string `json:"name"`
 	Kind    string `json:"kind"`
 	Website string `json:"website"`
+
+	// Parent names an organisation listed earlier in the file.
+	Parent string `json:"parent"`
+
+	SeedPlace
+
+	// Pending leaves the proposal waiting, with this many approvals, so a
+	// local run has something in the queue to vote on.
+	Pending   bool `json:"pending"`
+	Approvals int  `json:"approvals"`
 }
 
 // SeedUpdate is one piece of news on a topic.
@@ -113,18 +124,26 @@ type SeedCollective struct {
 
 	SeedPlace
 
-	Members []SeedMember `json:"members"`
+	// Members name organisations from the file's list, in the order the
+	// collective lists them.
+	Members []string     `json:"members"`
 	Topics  []SeedTopic  `json:"topics"`
 	Actions []SeedAction `json:"actions"`
 }
 
 // seedFile is the shape of fixtures.json.
 type seedFile struct {
-	Collectives []SeedCollective `json:"collectives"`
+	Organisations []SeedOrganisation `json:"organisations"`
+	Collectives   []SeedCollective   `json:"collectives"`
 }
 
 // SeedSummary is what went in.
 type SeedSummary struct {
+	Organisations int
+
+	// Waiting is how many proposals were left for somebody to vote on.
+	Waiting int
+
 	Collectives int
 	Topics      int
 	Updates     int
@@ -195,8 +214,14 @@ func Seed(ctx context.Context, backendURL, origin, zoneName string, out io.Write
 		return SeedSummary{}, fmt.Errorf("read what is already there: %w", err)
 	}
 
+	var summary SeedSummary
+	organisations, err := seeder.organisations(ctx, file.Organisations, &summary)
+	if err != nil {
+		return SeedSummary{}, fmt.Errorf("put the organisations in: %w", err)
+	}
+	seeder.organisationIDs = organisations
+
 	var (
-		summary SeedSummary
 
 		// What the reader will follow and attend: the first of each that went
 		// in, or that was already there.
@@ -253,6 +278,9 @@ type seeder struct {
 
 	// session is the seeded reader's own token, once it has one.
 	session string
+
+	// organisationIDs are the organisations that exist, by name.
+	organisationIDs map[string]string
 }
 
 // existing reads the collectives already there, by address.
@@ -296,12 +324,17 @@ func (s *seeder) collective(ctx context.Context, collective SeedCollective, summ
 	}
 	base := "/v1/staff/collectives/" + url.PathEscape(created.ID)
 
-	for _, member := range collective.Members {
+	for _, name := range collective.Members {
+		organisationID, known := s.organisationIDs[name]
+		if !known {
+			fmt.Fprintf(s.out, "  member %q: no such organisation in the fixtures\n", name)
+			continue
+		}
 		err := s.staff(ctx, http.MethodPost, base+"/members", map[string]any{
-			"name": member.Name, "kind": member.Kind, "website": member.Website,
+			"organisation_id": organisationID,
 		}, nil)
 		if err != nil {
-			fmt.Fprintf(s.out, "  member %q: %v\n", member.Name, err)
+			fmt.Fprintf(s.out, "  member %q: %v\n", name, err)
 		}
 	}
 
@@ -436,6 +469,75 @@ func (p SeedPlace) into(body map[string]any) {
 	}
 }
 
+// approvers are the editors who approve the fixtures' organisations: three
+// stand-ins other than the seeder, because the backend counts only votes from
+// editors other than a change's author.
+var approvers = []string{"seeder-approver-1", "seeder-approver-2", "seeder-approver-3"}
+
+// organisations puts the fixtures' organisations in, the way an editor's
+// would go in: proposed, then approved by three others. It returns every
+// organisation that exists by name, including those already there.
+//
+// An organisation already there by that name is left alone, so a resumed run
+// seeded twice does not propose them again.
+func (s *seeder) organisations(ctx context.Context, seeds []SeedOrganisation, summary *SeedSummary) (map[string]string, error) {
+	var answer struct {
+		Organisations []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"organisations"`
+	}
+	if err := s.staff(ctx, http.MethodGet, "/v1/staff/organisations", nil, &answer); err != nil {
+		return nil, err
+	}
+	byName := make(map[string]string, len(answer.Organisations))
+	for _, organisation := range answer.Organisations {
+		byName[organisation.Name] = organisation.ID
+	}
+
+	for _, seed := range seeds {
+		if _, there := byName[seed.Name]; there {
+			continue
+		}
+		body := map[string]any{
+			"name": seed.Name, "kind": seed.Kind, "website": seed.Website,
+			"parent_id": byName[seed.Parent],
+		}
+		seed.SeedPlace.into(body)
+
+		var change struct {
+			ID             string `json:"id"`
+			OrganisationID string `json:"organisation_id"`
+			Status         string `json:"status"`
+		}
+		if err := s.staff(ctx, http.MethodPost, "/v1/staff/organisations", body, &change); err != nil {
+			fmt.Fprintf(s.out, "  organisation %q: %v\n", seed.Name, err)
+			continue
+		}
+
+		votes := len(approvers)
+		if seed.Pending {
+			votes = min(seed.Approvals, len(approvers)-1)
+		}
+		for _, approver := range approvers[:votes] {
+			err := s.staffAs(ctx, approver, http.MethodPost, "/v1/staff/changes/"+url.PathEscape(change.ID)+"/votes",
+				map[string]any{"approve": true}, &change)
+			if err != nil {
+				fmt.Fprintf(s.out, "  organisation %q, approval by %s: %v\n", seed.Name, approver, err)
+				break
+			}
+		}
+
+		if change.Status == "applied" {
+			byName[seed.Name] = change.OrganisationID
+			summary.Organisations++
+		} else if seed.Pending {
+			summary.Waiting++
+		}
+	}
+	return byName, nil
+}
+
 // reader makes an account with a passkey, follows a collective and says it is
 // coming to an action.
 func (s *seeder) reader(ctx context.Context, collectiveID, actionID string) error {
@@ -489,6 +591,21 @@ func (s *seeder) reader(ctx context.Context, collectiveID, actionID string) erro
 func (s *seeder) staff(ctx context.Context, method, path string, body, out any) error {
 	return s.call(ctx, method, path, body, out, func(req *http.Request) {
 		req.Header.Set(staffauth.IdentityHeader, s.identity)
+	})
+}
+
+// staffAs makes a content call as another editor, in the same groups as the
+// seeder: the one way to cast the approvals a change needs, which never count
+// when they come from its author.
+func (s *seeder) staffAs(ctx context.Context, subject, method, path string, body, out any) error {
+	identity, err := staffauth.Identity{
+		Subject: subject, Name: subject, Groups: []string{config.DefaultAdminGroup},
+	}.Encode()
+	if err != nil {
+		return err
+	}
+	return s.call(ctx, method, path, body, out, func(req *http.Request) {
+		req.Header.Set(staffauth.IdentityHeader, identity)
 	})
 }
 

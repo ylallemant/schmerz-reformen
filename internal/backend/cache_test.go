@@ -68,6 +68,16 @@ var changesNothingCached = map[string]string{
 	"delete-theme":       "the theme overlay has its own cache",
 	"save-theme-asset":   "the theme overlay has its own cache",
 	"delete-theme-asset": "the theme overlay has its own cache",
+
+	// Proposed changes to organisations. A proposal changes no organisation —
+	// that is the point of it — so nothing a reader sees moves until a vote
+	// applies it, and the vote route declares what that makes wrong.
+	"staff-propose-organisation":              "a proposal, applied only by a vote",
+	"staff-propose-organisation-update":       "a proposal, applied only by a vote",
+	"staff-propose-organisation-deletion":     "a proposal, applied only by a vote",
+	"staff-propose-organisation-logo":         "a proposal, applied only by a vote",
+	"staff-propose-organisation-logo-removal": "a proposal, applied only by a vote",
+	"staff-withdraw-change":                   "closes a proposal that changed nothing",
 }
 
 // TestEveryWriteSaysWhatItMakesWrong is the test that stops the next endpoint

@@ -112,10 +112,10 @@
           {{ $page := . }}
           {{ range .Collective.Members }}
           <tr>
-            <td>{{ .Name }}</td>
+            <td><a class="link" href="/organisations/{{ .OrganisationID }}">{{ .Name }}</a>{{ if .Place }}<br><span class="hint">{{ .Place }}</span>{{ end }}</td>
             <td>{{ $page.T (printf "member_kind.%s" .Kind) }}</td>
             <td class="actions-column">
-              <a class="button secondary small" href="/collectives/{{ $page.Collective.ID }}/members/{{ .ID }}">{{ $page.T "button.edit" }}</a>
+              <a class="button secondary small" href="/collectives/{{ $page.Collective.ID }}/members/{{ .ID }}">{{ $page.T "members.place_in_list" }}</a>
             </td>
           </tr>
           {{ end }}
@@ -126,26 +126,19 @@
     <p class="empty">{{ .T "members.empty" }}</p>
     {{ end }}
 
+    {{/* Only organisations that exist can be added. One that does not yet is
+         proposed first, and is here once other editors have approved it. */}}
     <form method="post" action="/collectives/{{ .Collective.ID }}/members">
       <h3>{{ .T "members.add" }}</h3>
-      <label for="member-name">{{ .T "field.name" }}</label>
-      <input type="text" id="member-name" name="name" maxlength="120" required autocomplete="off">
-      <div class="field-row">
-        <div>
-          <label for="member-kind">{{ .T "field.kind" }}</label>
-          <select id="member-kind" name="kind">
-            {{ $page := . }}
-            {{ range .MemberKinds }}
-            <option value="{{ . }}">{{ $page.T (printf "member_kind.%s" .) }}</option>
-            {{ end }}
-          </select>
-        </div>
-        <div>
-          <label for="member-website">{{ .T "field.website" }}</label>
-          <input type="url" id="member-website" name="website" maxlength="500" placeholder="https://">
-        </div>
+      <label for="organisation_id">{{ .T "members.choose" }}
+        <span class="hint">{{ .T "members.choose_hint" }}</span>
+      </label>
+      {{ template "organisation-picker" dict "Page" . "ID" "organisation_id" "Name" "organisation_id"
+           "Organisations" .Organisations "Selected" "" "Exclude" "" "None" false "Required" true }}
+      <div class="button-row">
+        <button class="button secondary" type="submit">{{ .T "members.add" }}</button>
+        <a class="link" href="/organisations/new">{{ .T "members.missing" }}</a>
       </div>
-      <button class="button secondary" type="submit">{{ .T "members.add" }}</button>
     </form>
   </aside>
   {{ end }}

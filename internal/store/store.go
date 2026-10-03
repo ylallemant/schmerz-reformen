@@ -109,6 +109,9 @@ func (s *Store) Migrate() error {
 	if err := s.db.AutoMigrate(schema()...); err != nil {
 		return fmt.Errorf("migrate schema: %w", err)
 	}
+	if err := migrateLegacyMembers(s.db); err != nil {
+		return fmt.Errorf("move member organisations into their own table: %w", err)
+	}
 	log.Info().Msg("database schema up to date")
 	return nil
 }
@@ -117,6 +120,9 @@ func (s *Store) Migrate() error {
 func schema() []any {
 	return []any{
 		&models.Collective{},
+		&models.Organisation{},
+		&models.OrganisationChange{},
+		&models.ChangeVote{},
 		&models.CollectiveMember{},
 		&models.Media{},
 		&models.Topic{},

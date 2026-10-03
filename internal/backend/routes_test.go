@@ -32,19 +32,7 @@ func TestRoutesRegister(t *testing.T) {
 // register calls would mean a route added to one and missing from the other,
 // which is exactly the hole those tests exist to close.
 func registerEverything(a *API, api huma.API) {
-	a.registerAccountRoutes(api)
-	a.registerLinkRoutes(api)
-	a.registerNotificationRoutes(api)
-	a.registerThemeRoutes(api)
-	a.registerThemeAssetRoutes(api)
-	a.registerCollectiveRoutes(api)
-	a.registerTopicRoutes(api)
-	a.registerUpdateRoutes(api)
-	a.registerActionRoutes(api)
-	a.registerMapRoutes(api)
-	a.registerFollowRoutes(api)
-	a.registerMediaRoutes(api)
-	a.registerStaffRoutes(api)
+	a.registerOperations(api)
 }
 
 // route is one registered operation with where it answers.

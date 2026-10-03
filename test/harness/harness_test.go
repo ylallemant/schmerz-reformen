@@ -157,6 +157,28 @@ func TestPathsAreNamedPerService(t *testing.T) {
 	}
 }
 
+func TestDatabaseArgs(t *testing.T) {
+	dir := RunDir{Databases: "/databases", Storage: "/storage"}
+
+	if got := databaseArgs(Service{Name: "console"}, dir); got != nil {
+		t.Errorf("a service without data got database flags: %v", got)
+	}
+
+	sqlite := strings.Join(databaseArgs(Service{Name: "backend", Database: true}, dir), " ")
+	if !strings.Contains(sqlite, "--database-driver sqlite --database-dsn /databases/backend.db") {
+		t.Errorf("default database flags = %q, want the run directory's SQLite file", sqlite)
+	}
+
+	postgres := strings.Join(databaseArgs(Service{Name: "backend", Database: true,
+		PostgresDSN: "postgres://db/app"}, dir), " ")
+	if !strings.Contains(postgres, "--database-driver postgres --database-dsn postgres://db/app") {
+		t.Errorf("-postgres database flags = %q, want the PostgreSQL URL", postgres)
+	}
+	if !strings.Contains(postgres, "--storage-url") {
+		t.Errorf("-postgres dropped the storage flag: %q", postgres)
+	}
+}
+
 func TestPruneKeepsNewest(t *testing.T) {
 	base := t.TempDir()
 	names := []string{

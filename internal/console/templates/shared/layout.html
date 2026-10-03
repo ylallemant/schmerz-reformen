@@ -67,6 +67,7 @@
   <nav class="nav" aria-label="{{ .T "nav.main" }}">
     <div class="nav-inner">
       {{ template "navlink" dict "Page" . "Href" "/" "Key" "nav.collectives" }}
+      {{ template "navlink" dict "Page" . "Href" "/organisations" "Key" "nav.organisations" }}
       {{ template "navlink" dict "Page" . "Href" "/audit" "Key" "nav.audit" }}
       {{/* Absent, not disabled, for somebody who cannot use it. The backend
            is what refuses; this only spares them a page that says no. */}}
@@ -74,6 +75,19 @@
       {{ template "navlink" dict "Page" . "Href" "/settings/theme" "Key" "nav.theme" }}
       {{ end }}
       <span class="nav-spacer"></span>
+      {{/* Local only: which stand-in editor this browser is. Approving a
+           change takes editors other than its author, so one person testing
+           locally needs to be several. */}}
+      {{ if .Development }}
+      <form class="languages" method="post" action="/development/stand-in" aria-label="{{ .T "nav.stand_in" }}">
+        <input type="hidden" name="next" value="{{ .Here }}">
+        <span class="nav-identity">{{ .T "nav.stand_in" }}</span>
+        {{ $current := .StandIn }}
+        {{ range .StandIns }}
+        <button type="submit" name="stand_in" value="{{ . }}" aria-pressed="{{ if eq . $current }}true{{ else }}false{{ end }}">{{ . }}</button>
+        {{ end }}
+      </form>
+      {{ end }}
       <span class="nav-identity">{{ .Editor }}</span>
       {{/* A form, because signing out is a change. A link would be followed
            by every prefetcher that touches the page. */}}
@@ -110,6 +124,7 @@
   <script src="/static/picker.js?v={{ .AssetVersion }}"></script>
   {{ end }}
   <script src="/static/confirm.js?v={{ .AssetVersion }}"></script>
+  <script src="/static/filter.js?v={{ .AssetVersion }}"></script>
   <script src="/static/theme.js?v={{ .AssetVersion }}"></script>
 </body>
 </html>{{end}}
@@ -173,6 +188,43 @@
   <input type="text" id="place" name="place" maxlength="160" autocomplete="off" value="{{ .Place.Place }}">
 </fieldset>
 {{end}}
+
+{{/* The organisation picker: one text field, and a list of matches that
+     opens below it as the editor types — by name, place or parent.
+
+     Underneath is a plain <select>, which is what the form posts. The script
+     hides it and draws the field and the list in its place; without the
+     script the <select> is the picker, and nothing is lost but the search.
+     Each option carries what it is shown and found by in data attributes,
+     rendered and escaped here: the script copies text into elements it
+     creates and never parses any as markup.
+
+     The first option is always the empty choice — "none" where having no
+     organisation is a valid answer, "choose" where one is required — so the
+     field can be cleared, and a required one refused while empty.
+
+     Arguments: Page, ID and Name of the field, Organisations to offer,
+     Selected (an identifier), Exclude (one not to offer — an organisation
+     cannot be its own parent), None (no organisation is a valid answer), and
+     Required. */}}
+{{define "organisation-picker"}}
+{{ $page := .Page }}{{ $selected := .Selected }}{{ $exclude := .Exclude }}
+<div class="combo" data-combobox
+     data-placeholder="{{ $page.T "picker.search" }}" data-empty="{{ $page.T "picker.no_match" }}"
+     data-required-message="{{ $page.T "picker.required" }}">
+  <select id="{{ .ID }}" name="{{ .Name }}"{{ if .Required }} required{{ end }}>
+    <option value=""{{ if not $selected }} selected{{ end }}>{{ if .None }}{{ $page.T "picker.none" }}{{ else }}{{ $page.T "picker.choose" }}{{ end }}</option>
+    {{ range .Organisations }}{{ if ne .ID $exclude }}
+    <option value="{{ .ID }}" data-search="{{ .Name }} {{ .Place }} {{ .ParentName }}"
+            data-name="{{ .Name }}" data-detail="{{ .Place }}{{ if and .Place .ParentName }} · {{ end }}{{ .ParentName }}"{{ if eq .ID $selected }} selected{{ end }}>{{ .Name }}{{ if .Place }} · {{ .Place }}{{ end }}{{ if .ParentName }} ({{ .ParentName }}){{ end }}</option>
+    {{ end }}{{ end }}
+  </select>
+</div>
+{{end}}
+
+{{/* A change's status as a pill: what is still waiting is the one that asks
+     for attention. */}}
+{{define "change-status"}}<span class="pill{{ if eq .Status "applied" }} ok{{ end }}">{{ .Page.T (printf "change_status.%s" .Status) }}</span>{{end}}
 
 {{/* The tabs of one collective: its profile, its topics, its actions. */}}
 {{define "collective-tabs"}}

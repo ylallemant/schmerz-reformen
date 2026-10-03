@@ -33,6 +33,10 @@ type StaffProfile struct {
 	Admin   bool   `json:"admin"`
 
 	Collectives []Collective `json:"collectives"`
+
+	// Waiting is how many changes to organisations wait for this editor's
+	// vote.
+	Waiting int `json:"waiting"`
 }
 
 // StaffMe returns what the signed-in editor may do.
@@ -82,15 +86,13 @@ func (c *Client) DeleteCollective(ctx context.Context, id string) error {
 	return c.send(ctx, http.MethodDelete, "/v1/staff/collectives/"+url.PathEscape(id), "", nil)
 }
 
-// MemberFields is a member organisation as an editor's form sends it.
+// MemberFields adds an organisation to a collective, or moves it in the list.
 type MemberFields struct {
-	Name     string `json:"name"`
-	Kind     string `json:"kind,omitempty"`
-	Website  string `json:"website,omitempty"`
-	Position int    `json:"position,omitempty"`
+	OrganisationID string `json:"organisation_id,omitempty"`
+	Position       int    `json:"position,omitempty"`
 }
 
-// CreateMember adds an organisation to a collective.
+// CreateMember adds an existing organisation to a collective.
 func (c *Client) CreateMember(ctx context.Context, collectiveID string, fields MemberFields) (Member, error) {
 	var member Member
 	err := c.write(ctx, http.MethodPost,
@@ -98,14 +100,14 @@ func (c *Client) CreateMember(ctx context.Context, collectiveID string, fields M
 	return member, err
 }
 
-// SaveMember changes a member organisation.
+// SaveMember moves an organisation in a collective's list.
 func (c *Client) SaveMember(ctx context.Context, id string, fields MemberFields) (Member, error) {
 	var member Member
 	err := c.write(ctx, http.MethodPut, "/v1/staff/members/"+url.PathEscape(id), fields, &member)
 	return member, err
 }
 
-// DeleteMember removes a member organisation.
+// DeleteMember takes an organisation out of a collective.
 func (c *Client) DeleteMember(ctx context.Context, id string) error {
 	return c.send(ctx, http.MethodDelete, "/v1/staff/members/"+url.PathEscape(id), "", nil)
 }
@@ -119,17 +121,6 @@ func (c *Client) UploadCollectiveLogo(ctx context.Context, id, contentType strin
 // DeleteCollectiveLogo removes it.
 func (c *Client) DeleteCollectiveLogo(ctx context.Context, id string) error {
 	return c.send(ctx, http.MethodDelete, "/v1/staff/collectives/"+url.PathEscape(id)+"/logo", "", nil)
-}
-
-// UploadMemberLogo replaces a member organisation's logo.
-func (c *Client) UploadMemberLogo(ctx context.Context, id, contentType string, data []byte) error {
-	return c.send(ctx, http.MethodPut,
-		"/v1/staff/members/"+url.PathEscape(id)+"/logo", contentType, data)
-}
-
-// DeleteMemberLogo removes it.
-func (c *Client) DeleteMemberLogo(ctx context.Context, id string) error {
-	return c.send(ctx, http.MethodDelete, "/v1/staff/members/"+url.PathEscape(id)+"/logo", "", nil)
 }
 
 // StaffTopics returns a collective's topics at every status.

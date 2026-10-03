@@ -25,7 +25,7 @@ type ThemeAsset struct {
 	ContentType string `gorm:"size:128" json:"content_type"`
 
 	// Data is the image itself. Bounded at upload — see theme.MaxAssetBytes.
-	Data []byte `gorm:"type:blob" json:"-"`
+	Data []byte `json:"-"`
 
 	// Size is kept alongside so a listing need not load every image.
 	Size int `json:"size"`

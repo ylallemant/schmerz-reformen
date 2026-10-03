@@ -32,6 +32,11 @@ type Service struct {
 	// other two reach it through its API.
 	Database bool
 
+	// PostgresDSN, when set, is the PostgreSQL database the service uses
+	// instead of the run directory's SQLite file — for checking locally that
+	// the schema and the queries work on the engine production runs.
+	PostgresDSN string
+
 	// BackendURL is where this service reaches the backend. Empty for the
 	// backend itself. It has to be passed explicitly: on ephemeral ports the
 	// compiled-in default points nowhere, and the service would quietly
@@ -74,14 +79,7 @@ func Start(root string, dir RunDir, svc Service, logLevel string, env []string) 
 		"--app-port", fmt.Sprint(svc.AppPort),
 		"--maintenance-port", fmt.Sprint(svc.MaintenancePort),
 	}
-	if svc.Database {
-		args = append(args,
-			"--database-driver", "sqlite",
-			"--database-dsn", dir.DatabasePath(svc.Name),
-			// Uploads are written here rather than into the working tree.
-			"--storage-url", dir.StorageURL(),
-		)
-	}
+	args = append(args, databaseArgs(svc, dir)...)
 	if svc.BackendURL != "" {
 		args = append(args, "--backend-url", svc.BackendURL)
 	}
@@ -126,6 +124,24 @@ func Start(root string, dir RunDir, svc Service, logLevel string, env []string) 
 		close(proc.done)
 	}()
 	return proc, nil
+}
+
+// databaseArgs are the flags that say where a service keeps its data: none for
+// a service that owns no data, the run directory's SQLite file by default.
+func databaseArgs(svc Service, dir RunDir) []string {
+	if !svc.Database {
+		return nil
+	}
+	driver, dsn := "sqlite", dir.DatabasePath(svc.Name)
+	if svc.PostgresDSN != "" {
+		driver, dsn = "postgres", svc.PostgresDSN
+	}
+	return []string{
+		"--database-driver", driver,
+		"--database-dsn", dsn,
+		// Uploads are written here rather than into the working tree.
+		"--storage-url", dir.StorageURL(),
+	}
 }
 
 // Done is closed once the service has exited.

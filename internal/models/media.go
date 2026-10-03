@@ -1,7 +1,6 @@
 package models
 
-// Media is one uploaded image: a collective's logo, or a member
-// organisation's.
+// Media is one uploaded image: a collective's logo, or an organisation's.
 //
 // The row is the metadata and the bytes are in storage, under Key. Keeping the
 // two apart is what lets the backing service be configuration — a directory in
@@ -12,7 +11,14 @@ type Media struct {
 
 	// CollectiveID is whose it is. It scopes who may replace or delete it, and
 	// it is what a collective's deletion sweeps up.
-	CollectiveID string `gorm:"index;size:36" json:"collective_id"`
+	CollectiveID string `gorm:"index;size:36" json:"collective_id,omitempty"`
+
+	// OrganisationID is set instead for an organisation's logo, which no
+	// collective owns: deleting a collective must not take the logo of a
+	// union that is in four others with it. An image uploaded with a change
+	// that is still waiting for approval carries it too, and becomes the logo
+	// only if the change is applied.
+	OrganisationID string `gorm:"index;size:36" json:"organisation_id,omitempty"`
 
 	// Key is where the bytes are in storage. Derived from the identifier, never
 	// from an uploaded filename: a name somebody else chose has no business

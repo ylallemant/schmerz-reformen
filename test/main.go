@@ -7,6 +7,8 @@
 //	go run ./test -dynamic-ports  # ephemeral ports, for a parallel run
 //	go run ./test -log-level trace
 //	go run ./test -data latest    # start from a previous run's state
+//	go run ./test -postgres postgres://u:p@localhost:5432/db?sslmode=disable
+//	                              # the backend on PostgreSQL, as in production
 //
 // Every run gets its own directory, so one session's logs and database never
 // overwrite the last one's. With -data, no new directory is made at all: the
@@ -55,6 +57,8 @@ func main() {
 		"carry on with the most recent run — the same as -data latest")
 	seeding := flag.Bool("seeding", false,
 		"put example collectives, topics, updates and actions in once the services are up")
+	postgres := flag.String("postgres", "",
+		"run the backend on this PostgreSQL URL instead of the run directory's SQLite file")
 	flag.Parse()
 
 	// -latest is shorthand, not a second mechanism: it resolves through the
@@ -72,13 +76,13 @@ func main() {
 		*data = "latest"
 	}
 
-	if err := run(*logLevel, *dynamicPorts, *data, *seeding); err != nil {
+	if err := run(*logLevel, *dynamicPorts, *data, *seeding, *postgres); err != nil {
 		fmt.Fprintf(os.Stderr, "\ntest: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(logLevel string, dynamicPorts bool, data string, seeding bool) error {
+func run(logLevel string, dynamicPorts bool, data string, seeding bool, postgres string) error {
 	root, err := moduleRoot()
 	if err != nil {
 		return err
@@ -102,7 +106,7 @@ func run(logLevel string, dynamicPorts bool, data string, seeding bool) error {
 	frontendURL := fmt.Sprintf("http://localhost:%d", ports.FrontendApp)
 	services := []harness.Service{
 		{Name: "backend", AppPort: ports.BackendApp, MaintenancePort: ports.BackendMaintenance,
-			Database: true, SiteURL: frontendURL},
+			Database: true, PostgresDSN: postgres, SiteURL: frontendURL},
 		{Name: "console", AppPort: ports.ConsoleApp, MaintenancePort: ports.ConsoleMaintenance,
 			BackendURL: backendURL, SiteURL: frontendURL,
 			ConsoleURL: fmt.Sprintf("http://localhost:%d", ports.ConsoleApp)},
@@ -141,6 +145,11 @@ func run(logLevel string, dynamicPorts bool, data string, seeding bool) error {
 			return err
 		}
 		fmt.Printf("run directory: %s\n", dir.Root)
+	}
+	if postgres != "" {
+		// The database is outside the run directory, so -data and -latest
+		// resume the logs and the storage but not the content.
+		fmt.Println("database:      PostgreSQL, from -postgres")
 	}
 	fmt.Println()
 
@@ -225,8 +234,11 @@ func seed(ctx context.Context, backendURL, origin string) {
 		return
 	}
 
-	fmt.Printf("seeded %d collectives, %d topics, %d updates, %d actions",
-		summary.Collectives, summary.Topics, summary.Updates, summary.Actions)
+	fmt.Printf("seeded %d organisations, %d collectives, %d topics, %d updates, %d actions",
+		summary.Organisations, summary.Collectives, summary.Topics, summary.Updates, summary.Actions)
+	if summary.Waiting > 0 {
+		fmt.Printf("; proposals waiting for a vote: %d", summary.Waiting)
+	}
 	if summary.Skipped > 0 {
 		// Not a failure. A run that was already seeded has these collectives
 		// at these addresses, and finding them is the seeder working.

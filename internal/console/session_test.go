@@ -246,3 +246,31 @@ func TestARedirectKeepsItsFragment(t *testing.T) {
 		}
 	}
 }
+
+// TestADevelopmentConsoleOffersSeveralEditors: one person testing locally has
+// to be the author of a change and the three editors who approve it.
+func TestADevelopmentConsoleOffersSeveralEditors(t *testing.T) {
+	c := &console{development: true, developmentIdentity: staffauth.Identity{
+		Subject: "development", Name: "Development", Groups: []string{"schmerz-admins"},
+	}}
+
+	first := httptest.NewRequest(http.MethodGet, "/", nil)
+	if got := c.standIn(first); got.Subject != "development" {
+		t.Errorf("without a choice, subject = %q, want the configured identity", got.Subject)
+	}
+
+	third := httptest.NewRequest(http.MethodGet, "/", nil)
+	third.AddCookie(&http.Cookie{Name: standInCookie, Value: "3"})
+	got := c.standIn(third)
+	if got.Subject != "development-3" || got.Name != "Development 3" || len(got.Groups) != 1 {
+		t.Errorf("stand-in 3 = %+v, want another editor in the same groups", got)
+	}
+
+	for _, value := range []string{"0", "5", "x", "-1"} {
+		odd := httptest.NewRequest(http.MethodGet, "/", nil)
+		odd.AddCookie(&http.Cookie{Name: standInCookie, Value: value})
+		if got := c.standIn(odd); got.Subject != "development" {
+			t.Errorf("cookie %q gave %q, want the first stand-in", value, got.Subject)
+		}
+	}
+}

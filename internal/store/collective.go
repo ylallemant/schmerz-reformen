@@ -16,6 +16,9 @@ var ErrCollectiveNotFound = errors.New("collective not found")
 // ErrMemberNotFound is returned when no member organisation matches.
 var ErrMemberNotFound = errors.New("member not found")
 
+// ErrAlreadyMember means the organisation is already in the collective.
+var ErrAlreadyMember = errors.New("that organisation is already a member of this collective")
+
 // ErrSlugTaken means another collective already answers at that address.
 var ErrSlugTaken = errors.New("that address is already taken")
 
@@ -88,6 +91,7 @@ func (s *Store) collectiveWhere(ctx context.Context, query string, arg any) (mod
 		Preload("Members", func(db *gorm.DB) *gorm.DB {
 			return db.Order("position asc, created_at asc")
 		}).
+		Preload("Members.Organisation").
 		Where(query, arg).First(&collective).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Collective{}, ErrCollectiveNotFound
@@ -247,22 +251,39 @@ func (s *Store) DeleteCollective(ctx context.Context, id string) ([]string, erro
 	return keys, err
 }
 
-// Member returns one member organisation.
+// Member returns one membership, with its organisation.
 func (s *Store) Member(ctx context.Context, id string) (models.CollectiveMember, error) {
 	var member models.CollectiveMember
-	err := s.db.WithContext(ctx).First(&member, "id = ?", id).Error
+	err := s.db.WithContext(ctx).Preload("Organisation").First(&member, "id = ?", id).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.CollectiveMember{}, ErrMemberNotFound
 	}
 	return member, err
 }
 
-// SaveMember creates or updates a member organisation.
+// SaveMember adds an organisation to a collective, or moves it in the list.
 //
 // A new member goes to the end of the list. Where it belongs after that is the
-// collective's decision — see CollectiveMember.Position.
+// collective's decision — see CollectiveMember.Position. The organisation is
+// never written through a membership: it is changed only by agreement.
 func (s *Store) SaveMember(ctx context.Context, member *models.CollectiveMember) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if member.ID == "" {
+			if _, err := organisationIn(tx, member.OrganisationID); err != nil {
+				return err
+			}
+			var already int64
+			err := tx.Model(&models.CollectiveMember{}).
+				Where("collective_id = ? AND organisation_id = ?", member.CollectiveID, member.OrganisationID).
+				Count(&already).Error
+			if err != nil {
+				return err
+			}
+			if already > 0 {
+				return ErrAlreadyMember
+			}
+		}
+
 		if member.ID == "" && member.Position == 0 {
 			var last models.CollectiveMember
 			err := tx.Where("collective_id = ?", member.CollectiveID).
@@ -276,11 +297,12 @@ func (s *Store) SaveMember(ctx context.Context, member *models.CollectiveMember)
 				return err
 			}
 		}
-		return tx.Save(member).Error
+		return tx.Omit("Organisation").Save(member).Error
 	})
 }
 
-// DeleteMember removes a member organisation.
+// DeleteMember takes an organisation out of a collective. The organisation
+// itself stays: it may be in others, and deleting it is a change of its own.
 func (s *Store) DeleteMember(ctx context.Context, id string) error {
 	result := s.db.WithContext(ctx).Delete(&models.CollectiveMember{}, "id = ?", id)
 	if result.Error != nil {

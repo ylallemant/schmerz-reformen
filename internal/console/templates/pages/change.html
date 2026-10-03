@@ -1,0 +1,125 @@
+{{define "content"}}
+{{ $page := . }}{{ $c := .Change }}
+<ol class="crumbs">
+  <li><a class="link" href="/organisations">{{ .T "nav.organisations" }}</a></li>
+  {{ if and (ne $c.Kind "create") (ne $c.Status "applied") }}
+  <li><a class="link" href="/organisations/{{ $c.OrganisationID }}">{{ $c.Before.Name }}</a></li>
+  {{ end }}
+  <li>{{ .T "change.title" }}</li>
+</ol>
+<div class="heading-row">
+  <h1><span class="tag">{{ .T (printf "change_kind.%s" $c.Kind) }}</span> {{ $c.Name }}</h1>
+  {{ template "change-status" dict "Page" . "Status" $c.Status }}
+</div>
+<p class="lede">
+  {{ if $c.Mine }}{{ .T "change.proposed_by_you" }}{{ else }}{{ .Tf "change.proposed_by" "Name" $c.AuthorName }}{{ end }}
+  · {{ .Date $c.CreatedAt }}
+</p>
+{{ if eq $c.Status "failed" }}<p class="warning">{{ .Tf "change.failed" "Reason" $c.Reason }}</p>{{ end }}
+
+{{/* What it would do, beside what it replaces. A deletion replaces
+     everything with nothing; a creation replaces nothing. */}}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "change.field" }}</th>
+        {{ if ne $c.Kind "create" }}<th scope="col">{{ .T "change.before" }}</th>{{ end }}
+        {{ if ne $c.Kind "delete" }}<th scope="col">{{ .T "change.after" }}</th>{{ end }}
+      </tr>
+    </thead>
+    <tbody>
+      {{ if or (eq $c.Kind "delete") ($c.Sets "name") }}
+      <tr>
+        <th scope="row">{{ .T "field.name" }}</th>
+        {{ if ne $c.Kind "create" }}<td>{{ $c.Before.Name }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td>{{ $c.After.Name }}</td>{{ end }}
+      </tr>
+      {{ end }}
+      {{ if or (eq $c.Kind "delete") ($c.Sets "kind") }}
+      <tr>
+        <th scope="row">{{ .T "field.kind" }}</th>
+        {{ if ne $c.Kind "create" }}<td>{{ if $c.Before.Kind }}{{ .T (printf "member_kind.%s" $c.Before.Kind) }}{{ end }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td>{{ if $c.After.Kind }}{{ .T (printf "member_kind.%s" $c.After.Kind) }}{{ end }}</td>{{ end }}
+      </tr>
+      {{ end }}
+      {{ if or (eq $c.Kind "delete") ($c.Sets "website") }}
+      <tr>
+        <th scope="row">{{ .T "field.website" }}</th>
+        {{ if ne $c.Kind "create" }}<td class="wrap">{{ $c.Before.Website }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td class="wrap">{{ $c.After.Website }}</td>{{ end }}
+      </tr>
+      {{ end }}
+      {{ if or (eq $c.Kind "delete") ($c.Sets "parent") }}
+      <tr>
+        <th scope="row">{{ .T "field.parent" }}</th>
+        {{ if ne $c.Kind "create" }}<td>{{ $c.Before.ParentName }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td>{{ $c.After.ParentName }}</td>{{ end }}
+      </tr>
+      {{ end }}
+      {{ if or (eq $c.Kind "delete") ($c.Sets "place") }}
+      <tr>
+        <th scope="row">{{ .T "field.place" }}</th>
+        {{ if ne $c.Kind "create" }}<td>{{ $c.Before.Place }}{{ if $c.Before.Latitude }} <span class="hint mono">{{ printf "%.5f, %.5f" $c.Before.Latitude $c.Before.Longitude }}</span>{{ end }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td>{{ $c.After.Place }}{{ if $c.After.Latitude }} <span class="hint mono">{{ printf "%.5f, %.5f" $c.After.Latitude $c.After.Longitude }}</span>{{ end }}</td>{{ end }}
+      </tr>
+      {{ end }}
+      {{ if or (eq $c.Kind "delete") ($c.Sets "logo") }}
+      <tr>
+        <th scope="row">{{ .T "logo.title" }}</th>
+        {{ if ne $c.Kind "create" }}<td>{{ if $c.Before.LogoID }}<span class="logo-box"><img src="/media/{{ $c.Before.LogoID }}" alt=""></span>{{ else }}<span class="hint">{{ .T "change.no_logo" }}</span>{{ end }}</td>{{ end }}
+        {{ if ne $c.Kind "delete" }}<td>{{ if $c.After.LogoID }}<span class="logo-box"><img src="/media/{{ $c.After.LogoID }}" alt=""></span>{{ else }}<span class="hint">{{ .T "change.no_logo" }}</span>{{ end }}</td>{{ end }}
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+
+<div class="split">
+  <section class="prose">
+    <h2>{{ .T "changes.votes" }}</h2>
+    <p>{{ .Tf "changes.tally" "Approvals" $c.Approvals "Rejections" $c.Rejections "Needed" $c.Needed }}</p>
+    {{ if $c.Votes }}
+    <ul class="plain-list">
+      {{ range $c.Votes }}
+      <li>
+        <span class="pill{{ if .Approve }} ok{{ end }}">{{ if .Approve }}{{ $page.T "change.approved" }}{{ else }}{{ $page.T "change.rejected" }}{{ end }}</span>
+        {{ .VoterName }}{{ if .Comment }}: <q>{{ .Comment }}</q>{{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p class="empty">{{ .T "change.no_votes" }}</p>
+    {{ end }}
+  </section>
+
+  <aside class="split-aside">
+    {{ if $c.CanVote }}
+    <form method="post" action="/changes/{{ $c.ID }}/vote">
+      <h2>{{ .T "change.your_vote" }}</h2>
+      <label for="comment">{{ .T "change.comment" }}
+        <span class="hint">{{ .T "change.comment_hint" }}</span>
+      </label>
+      <textarea class="short" id="comment" name="comment" maxlength="500" rows="3">{{ .Comment }}</textarea>
+      <div class="button-row">
+        <button class="button" type="submit" name="vote" value="approve">{{ .T "change.approve" }}</button>
+        <button class="button danger" type="submit" name="vote" value="reject">{{ .T "change.reject" }}</button>
+      </div>
+    </form>
+    {{ else if eq $c.Status "pending" }}
+      {{ if $c.Mine }}
+      <p class="section-note">{{ .T "change.yours" }}</p>
+      <form method="post" action="/changes/{{ $c.ID }}/withdraw" data-confirm="{{ .T "change.withdraw_confirm" }}">
+        <button class="button secondary" type="submit">{{ .T "change.withdraw" }}</button>
+      </form>
+      {{ else }}
+      <p class="section-note">{{ .T "change.voted" }}</p>
+      {{ end }}
+    {{ end }}
+
+    {{ if and (eq $c.Status "applied") (ne $c.Kind "delete") }}
+    <p><a class="button secondary" href="/organisations/{{ $c.OrganisationID }}">{{ .T "change.open_organisation" }}</a></p>
+    {{ end }}
+  </aside>
+</div>
+{{end}}

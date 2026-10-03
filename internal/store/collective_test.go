@@ -90,7 +90,7 @@ func TestMembersKeepTheOrderTheCollectiveChose(t *testing.T) {
 
 	for _, name := range []string{"ver.di", "Mieterverein", "Attac"} {
 		member := &models.CollectiveMember{
-			CollectiveID: owner.ID, Name: name, Kind: models.MemberUnion,
+			CollectiveID: owner.ID, OrganisationID: organisation(t, s, name, "").ID,
 		}
 		if err := s.SaveMember(ctx, member); err != nil {
 			t.Fatalf("SaveMember(%q): %v", name, err)
@@ -105,8 +105,8 @@ func TestMembersKeepTheOrderTheCollectiveChose(t *testing.T) {
 		t.Fatalf("%d members, want 3", len(got.Members))
 	}
 	for i, want := range []string{"ver.di", "Mieterverein", "Attac"} {
-		if got.Members[i].Name != want {
-			t.Errorf("member %d = %q, want %q — the order they were added", i, got.Members[i].Name, want)
+		if got.Members[i].Organisation.Name != want {
+			t.Errorf("member %d = %q, want %q — the order they were added", i, got.Members[i].Organisation.Name, want)
 		}
 	}
 
@@ -117,8 +117,8 @@ func TestMembersKeepTheOrderTheCollectiveChose(t *testing.T) {
 		t.Fatalf("SaveMember: %v", err)
 	}
 	got, _ = s.Collective(ctx, owner.ID)
-	if got.Members[0].Name != "Attac" {
-		t.Errorf("first member = %q, want the one moved to the front", got.Members[0].Name)
+	if got.Members[0].Organisation.Name != "Attac" {
+		t.Errorf("first member = %q, want the one moved to the front", got.Members[0].Organisation.Name)
 	}
 
 	if err := s.DeleteMember(ctx, last.ID); err != nil {
@@ -148,8 +148,13 @@ func TestDeletingACollectiveLeavesNothingBehind(t *testing.T) {
 		t.Fatalf("SaveUpdate: %v", err)
 	}
 	demo := action(t, s, doomed.ID, "Demo", time.Now().Add(time.Hour))
-	if err := s.SaveMember(ctx, &models.CollectiveMember{CollectiveID: doomed.ID, Name: "ver.di"}); err != nil {
+	union := organisation(t, s, "ver.di", "")
+	if err := s.SaveMember(ctx, &models.CollectiveMember{CollectiveID: doomed.ID, OrganisationID: union.ID}); err != nil {
 		t.Fatalf("SaveMember: %v", err)
+	}
+	// The union's logo is the union's, not the collective's.
+	if err := s.CreateMedia(ctx, &models.Media{OrganisationID: union.ID, Key: "media/union.png"}); err != nil {
+		t.Fatalf("CreateMedia: %v", err)
 	}
 	if err := s.CreateMedia(ctx, &models.Media{CollectiveID: doomed.ID, Key: "media/logo.png"}); err != nil {
 		t.Fatalf("CreateMedia: %v", err)
@@ -179,6 +184,15 @@ func TestDeletingACollectiveLeavesNothingBehind(t *testing.T) {
 	}
 	if len(keys) != 1 || keys[0] != "media/logo.png" {
 		t.Errorf("keys = %v, want the one image to remove from storage", keys)
+	}
+
+	if _, err := s.Organisation(ctx, union.ID); err != nil {
+		t.Errorf("the organisation went with the collective: %v — it may be in others", err)
+	}
+	var unionLogos int64
+	s.DB().Model(&models.Media{}).Where("organisation_id = ?", union.ID).Count(&unionLogos) //nolint:errcheck
+	if unionLogos != 1 {
+		t.Error("the organisation's logo went with the collective")
 	}
 
 	for name, model := range map[string]any{

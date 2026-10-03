@@ -58,49 +58,20 @@ type Collective struct {
 	Members []CollectiveMember `gorm:"constraint:OnDelete:CASCADE" json:"members,omitempty"`
 }
 
-// MemberKind says what sort of organisation a member is.
-type MemberKind string
-
-const (
-	MemberUnion       MemberKind = "union"
-	MemberParty       MemberKind = "party"
-	MemberAssociation MemberKind = "association"
-	MemberInitiative  MemberKind = "initiative"
-	MemberOther       MemberKind = "other"
-)
-
-// MemberKinds lists them in the order a form offers them.
-var MemberKinds = []MemberKind{
-	MemberUnion, MemberParty, MemberAssociation, MemberInitiative, MemberOther,
-}
-
-// Valid reports whether the kind is one the model defines.
-func (k MemberKind) Valid() bool {
-	for _, known := range MemberKinds {
-		if k == known {
-			return true
-		}
-	}
-	return false
-}
-
-// CollectiveMember is one organisation inside a collective.
+// CollectiveMember is one organisation's place in a collective's list.
 //
-// **An organisation, never a person.** This is the list a reader looks at to
-// decide whether a collective is who it says it is — "ver.di, the tenants'
-// association and two parties" — so it carries a name, a website and a logo,
-// and nothing that could identify an individual.
+// The organisation itself — its name, logo, place — belongs to no collective
+// and is changed only by agreement (see Organisation). What is the
+// collective's own is that it counts the organisation among its members, and
+// in which order.
 type CollectiveMember struct {
 	Model
 
-	CollectiveID string `gorm:"index;size:36" json:"collective_id"`
+	CollectiveID   string `gorm:"index;size:36" json:"collective_id"`
+	OrganisationID string `gorm:"index;size:36" json:"organisation_id"`
 
-	Name    string     `gorm:"size:160" json:"name"`
-	Kind    MemberKind `gorm:"size:16" json:"kind"`
-	Website string     `gorm:"size:512" json:"website,omitempty"`
-
-	// LogoID is the uploaded logo, if there is one.
-	LogoID string `gorm:"size:36" json:"logo_id,omitempty"`
+	// Organisation is loaded with the member, never written through it.
+	Organisation Organisation `gorm:"foreignKey:OrganisationID" json:"organisation"`
 
 	// Position orders the list. The collective decides who is named first,
 	// and that is a political decision this site has no business making

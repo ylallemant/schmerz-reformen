@@ -195,3 +195,27 @@ func chdir(t *testing.T, dir string) {
 	}
 	t.Cleanup(func() { os.Chdir(old) }) //nolint:errcheck
 }
+
+func TestOrganisationApprovals(t *testing.T) {
+	cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+	Reset()
+	t.Cleanup(Reset)
+	RegisterCommonFlags(cmd, 8080, 8081)
+	RegisterCurationFlags(cmd)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Bootstrap(cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, err := LoadOrganisationApprovals(); err != nil || got != DefaultOrganisationApprovals {
+		t.Errorf("default = %d, %v; want %d", got, err, DefaultOrganisationApprovals)
+	}
+
+	t.Setenv("SCHMERZ_ORGANISATION_APPROVALS", "0")
+	if _, err := LoadOrganisationApprovals(); err == nil {
+		t.Error("zero approvals was accepted: a change would need nobody's agreement")
+	}
+}

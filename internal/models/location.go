@@ -53,3 +53,17 @@ func (a *Action) BeforeSave(*gorm.DB) error {
 	a.Location.Refresh()
 	return nil
 }
+
+// BeforeSave keeps an organisation's geohash in step with its coordinates.
+func (o *Organisation) BeforeSave(*gorm.DB) error {
+	o.Location.Refresh()
+	return nil
+}
+
+// BeforeSave keeps both of a change's locations in step with their
+// coordinates: the one it replaces is shown beside the one it proposes.
+func (c *OrganisationChange) BeforeSave(*gorm.DB) error {
+	c.Before.Location.Refresh()
+	c.After.Location.Refresh()
+	return nil
+}

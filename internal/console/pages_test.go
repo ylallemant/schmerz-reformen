@@ -67,8 +67,30 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		ID: "c1", Name: hostile, Slug: "buendnis", Summary: hostile, Description: hostile,
 		Website: "https://example.org/", Contact: hostile, Status: "published", AuthGroup: hostile,
 		Place: hostile, Latitude: 51.2277, Longitude: 6.7735, LogoID: "logo-1",
-		Members: []apiclient.Member{{ID: "m1", Name: hostile, Kind: "union", Position: 1}},
+		Members: []apiclient.Member{{ID: "m1", OrganisationID: "o1", Name: hostile, Kind: "union",
+			Place: hostile, Position: 1}},
 	}
+	values := apiclient.OrganisationValues{
+		Name: hostile, Kind: "union", Website: "https://example.org/", ParentID: "o2",
+		ParentName: hostile, LogoID: "logo-2", Place: hostile, Latitude: 51.2277, Longitude: 6.7735,
+	}
+	change := apiclient.Change{
+		ID: "ch1", OrganisationID: "o1", Kind: "update", Status: "pending",
+		Fields: []string{"name", "kind", "website", "parent", "place", "logo"},
+		Before: values, After: values, AuthorName: hostile, CanVote: true,
+		Votes:     []apiclient.Vote{{VoterName: hostile, Approve: false, Comment: hostile, At: when}},
+		Approvals: 1, Rejections: 1, Needed: 3, CreatedAt: when,
+	}
+	failed := change
+	failed.ID, failed.Status, failed.Reason, failed.CanVote, failed.Mine = "ch2", "failed", hostile, false, true
+	organisation := apiclient.Organisation{
+		ID: "o1", OrganisationValues: values,
+		Collectives: []apiclient.CollectiveRef{{ID: "c1", Name: hostile, Slug: "buendnis"}},
+		Pending:     []apiclient.Change{change},
+	}
+	parent := apiclient.Organisation{ID: "o2", OrganisationValues: apiclient.OrganisationValues{
+		Name: hostile, Kind: "union", Place: hostile,
+	}}
 	topic := apiclient.Topic{
 		ID: "t1", CollectiveID: "c1", Kind: "cut", Level: "municipal",
 		Title: hostile, Summary: hostile, Body: hostile, Amount: 100_000_000,
@@ -92,7 +114,7 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/staff/me", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, apiclient.StaffProfile{Subject: "development", Admin: true,
-			Collectives: []apiclient.Collective{collective}})
+			Collectives: []apiclient.Collective{collective}, Waiting: 2})
 	})
 	mux.HandleFunc("GET /v1/staff/collectives/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "c1" {
@@ -113,6 +135,29 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		answer(w, map[string]any{"actions": []apiclient.Action{action}})
 	})
 	mux.HandleFunc("GET /v1/staff/actions/{id}", func(w http.ResponseWriter, _ *http.Request) { answer(w, action) })
+	mux.HandleFunc("GET /v1/staff/organisations", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, map[string]any{"organisations": []apiclient.Organisation{organisation, parent}, "total": 2})
+	})
+	mux.HandleFunc("GET /v1/staff/organisations/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") != "o1" {
+			http.Error(w, `{"detail":"no such organisation"}`, http.StatusNotFound)
+			return
+		}
+		answer(w, organisation)
+	})
+	mux.HandleFunc("GET /v1/staff/changes", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, map[string]any{"changes": []apiclient.Change{change, failed}, "total": 2})
+	})
+	mux.HandleFunc("GET /v1/staff/changes/{id}", func(w http.ResponseWriter, r *http.Request) {
+		switch r.PathValue("id") {
+		case "ch1":
+			answer(w, change)
+		case "ch2":
+			answer(w, failed)
+		default:
+			http.Error(w, `{"detail":"no such change"}`, http.StatusNotFound)
+		}
+	})
 	mux.HandleFunc("GET /v1/staff/audit", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, map[string]any{"total": 120, "entries": []apiclient.AuditEntry{{
 			ID: "e1", At: when, Actor: hostile, ActorName: hostile, Action: "publish",
@@ -141,6 +186,11 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("POST /v1/staff/collectives/{id}/actions", write(action))
 	mux.HandleFunc("PUT /v1/staff/actions/{id}", write(action))
 	mux.HandleFunc("POST /v1/staff/collectives/{id}/members", write(collective.Members[0]))
+	mux.HandleFunc("POST /v1/staff/organisations", write(change))
+	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(change))
+	mux.HandleFunc("POST /v1/staff/organisations/{id}/deletion", write(change))
+	mux.HandleFunc("POST /v1/staff/changes/{id}/votes", write(change))
+	mux.HandleFunc("POST /v1/staff/changes/{id}/withdrawal", write(change))
 	mux.HandleFunc("DELETE /v1/staff/topics/{id}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("DELETE /v1/staff/collectives/{id}", write(map[string]bool{"done": true}))
 
@@ -277,6 +327,12 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/collectives/c1"},
 		{path: "/collectives/c1?notice=saved"},
 		{path: "/collectives/c1/members/m1"},
+		{path: "/organisations"},
+		{path: "/organisations/new"},
+		{path: "/organisations/o1"},
+		{path: "/organisations/o1?notice=proposed#de"},
+		{path: "/changes/ch1"},
+		{path: "/changes/ch2#de"},
 		{path: "/collectives/c1/topics"},
 		{path: "/collectives/c1/topics/new"},
 		{path: "/topics/t1"},
@@ -504,5 +560,75 @@ func TestWhatAnEditorCannotUseIsNotDrawn(t *testing.T) {
 	response, _ := get(t, served(t, backend.URL, "duesseldorf"), "/collectives/new")
 	if response.StatusCode != http.StatusForbidden {
 		t.Errorf("an editor opening the new-collective form = %d, want 403", response.StatusCode)
+	}
+}
+
+// TestOrganisationFormsProposeRatherThanSave: every form about an
+// organisation sends a proposal, and the editor is taken to it and told that
+// nothing has changed yet.
+func TestOrganisationFormsProposeRatherThanSave(t *testing.T) {
+	backend, log := fakeBackend(t, false)
+	console := served(t, backend.URL)
+
+	response, _ := post(t, console, "/organisations", url.Values{
+		"name": {"ver.di Düsseldorf"}, "kind": {"union"}, "website": {"https://example.org"},
+		"parent_id": {" o2 "}, "latitude": {"51.2277"}, "longitude": {"6.7735"}, "zoom": {"17"},
+		"place": {"Karlstraße 123"},
+	})
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/changes/ch1?notice=proposed" {
+		t.Fatalf("proposing = %d to %q, want the change with the proposed notice",
+			response.StatusCode, response.Header.Get("Location"))
+	}
+	sent, _ := log.last(http.MethodPost, "/v1/staff/organisations")
+	if sent.Body["name"] != "ver.di Düsseldorf" || sent.Body["parent_id"] != "o2" ||
+		sent.Body["zoom"] != float64(17) || sent.Body["place"] != "Karlstraße 123" {
+		t.Errorf("sent %v", sent.Body)
+	}
+
+	_, rendered := get(t, console, "/changes/ch1?notice=proposed#de")
+	if !strings.Contains(rendered, "Es ändert sich nichts") {
+		t.Error("the editor is not told that nothing has changed yet")
+	}
+
+	response, _ = post(t, console, "/changes/ch1/vote", url.Values{"vote": {"reject"}, "comment": {"Falscher Name"}})
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("voting = %d", response.StatusCode)
+	}
+	sent, _ = log.last(http.MethodPost, "/v1/staff/changes/ch1/votes")
+	if sent.Body["approve"] != false || sent.Body["comment"] != "Falscher Name" {
+		t.Errorf("vote sent as %v", sent.Body)
+	}
+
+	response, _ = post(t, console, "/collectives/c1/members", url.Values{"organisation_id": {"o2"}})
+	if response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("adding a member = %d", response.StatusCode)
+	}
+	sent, _ = log.last(http.MethodPost, "/v1/staff/collectives/c1/members")
+	if sent.Body["organisation_id"] != "o2" {
+		t.Errorf("member sent as %v, want the organisation chosen", sent.Body)
+	}
+}
+
+// TestTheMemberPickerOffersOnlyWhatIsNotListedYet: an organisation already in
+// the collective is not offered again, and an organisation is never offered
+// as its own parent.
+func TestTheMemberPickerOffersOnlyWhatIsNotListedYet(t *testing.T) {
+	backend, _ := fakeBackend(t, false)
+	console := served(t, backend.URL)
+
+	_, rendered := get(t, console, "/collectives/c1")
+	if strings.Contains(rendered, `<option value="o1"`) {
+		t.Error("the organisation already in the collective is offered again")
+	}
+	if !strings.Contains(rendered, `<option value="o2"`) {
+		t.Error("an organisation not yet in the collective is not offered")
+	}
+
+	_, rendered = get(t, console, "/organisations/o1")
+	if strings.Contains(rendered, `<option value="o1"`) {
+		t.Error("an organisation is offered as its own parent")
+	}
+	if !strings.Contains(rendered, `<option value="o2" data-search=`) || !strings.Contains(rendered, `selected>`) {
+		t.Error("the current parent is not offered, or not chosen")
 	}
 }

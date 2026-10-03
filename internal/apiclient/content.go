@@ -24,12 +24,14 @@ type CollectiveRef struct {
 
 // Member is one organisation in a collective.
 type Member struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	Website  string `json:"website,omitempty"`
-	LogoID   string `json:"logo_id,omitempty"`
-	Position int    `json:"position"`
+	ID             string `json:"id"`
+	OrganisationID string `json:"organisation_id"`
+	Name           string `json:"name"`
+	Kind           string `json:"kind"`
+	Website        string `json:"website,omitempty"`
+	LogoID         string `json:"logo_id,omitempty"`
+	Place          string `json:"place,omitempty"`
+	Position       int    `json:"position"`
 }
 
 // Collective is an alliance of organisations.

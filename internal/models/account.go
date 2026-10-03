@@ -64,7 +64,7 @@ type Credential struct {
 
 	// PublicKey verifies the signatures. There is no private key here and
 	// there never can be: it does not leave the authenticator.
-	PublicKey []byte `gorm:"type:blob" json:"-"`
+	PublicKey []byte `json:"-"`
 
 	// AttestationType and AAGUID say what kind of authenticator this is.
 	// Recorded rather than acted on: this site has no business refusing
@@ -152,7 +152,7 @@ type WebAuthnCeremony struct {
 	// Data is the library's own session state, as JSON. Opaque on purpose:
 	// what it holds is the library's business and re-deriving its shape here
 	// would be a second definition to keep in step.
-	Data []byte `gorm:"type:blob" json:"-"`
+	Data []byte `json:"-"`
 
 	// Subject is what the ceremony is about, for the cases where that cannot
 	// be looked up yet.
@@ -162,7 +162,7 @@ type WebAuthnCeremony struct {
 	// between the two — and they cannot be carried by the client, because a
 	// browser that chose its own handle could attach a passkey to somebody
 	// else's account. Empty for every other purpose.
-	Subject []byte `gorm:"type:blob" json:"-"`
+	Subject []byte `json:"-"`
 
 	// Purpose is "signup", "signin", "add-passkey" or "link-device", so a
 	// challenge issued for one cannot be finished as another.

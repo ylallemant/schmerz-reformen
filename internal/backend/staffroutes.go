@@ -8,6 +8,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
 )
 
@@ -46,6 +47,10 @@ type StaffMeOutput struct {
 		Admin bool `json:"admin"`
 
 		Collectives []CollectiveItem `json:"collectives"`
+
+		// Waiting is how many changes to organisations this editor may vote
+		// on now: proposed by somebody else, and not voted on yet.
+		Waiting int `json:"waiting"`
 	}
 }
 
@@ -60,11 +65,25 @@ func (a *API) staffMe(ctx context.Context, _ *struct{}) (*StaffMeOutput, error) 
 		return nil, err
 	}
 
+	pending, _, err := a.store.ListChanges(ctx, store.ChangeQuery{
+		Statuses: []models.ChangeStatus{models.ChangePending},
+		Page:     store.Page{Limit: 500},
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("cannot count the changes waiting for an editor")
+		return nil, huma.Error500InternalServerError("cannot read what is waiting")
+	}
+
 	out := &StaffMeOutput{}
 	out.Body.Subject = who.Subject
 	out.Body.Name = who.Name
 	out.Body.Admin = who.Admin
 	out.Body.Collectives = listing.Body.Collectives
+	for _, change := range a.changeItems(ctx, who, pending) {
+		if change.CanVote {
+			out.Body.Waiting++
+		}
+	}
 	return out, nil
 }
 

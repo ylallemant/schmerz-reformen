@@ -920,6 +920,7 @@ input[type="datetime-local"],
 input[type="number"],
 input[type="email"],
 input[type="file"],
+input[type="search"],
 select,
 textarea {
   width: 100%;
@@ -1542,6 +1543,93 @@ body > footer {
   padding: 0.75rem 0.875rem;
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+/* The organisation picker: a text field, and the matches in a list that
+   opens below it while somebody types. Above the map, which sits right
+   under one of them and draws its own panes high. */
+.combo {
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.combo-list {
+  position: absolute;
+  z-index: 1100;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  right: 0;
+  max-height: 20rem;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.18);
+}
+
+.combo-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.625rem;
+  border-radius: calc(var(--radius) / 2);
+  cursor: pointer;
+}
+
+.combo-list li[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.combo-detail {
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+
+.combo-list li.combo-empty {
+  cursor: default;
+  color: var(--text-muted);
+}
+
+.combo-input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.picker-search {
+  margin-bottom: 0.375rem;
+}
+
+/* A list of names with no bullets and some air between them. */
+.plain-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+}
+
+.plain-list li {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A small logo beside a name, in a table row. */
+.profile-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+/* A web address in a table cell breaks anywhere rather than widening the
+   table past the screen. */
+td.wrap {
+  overflow-wrap: anywhere;
 }
 
 /* --- theme library manager --- */

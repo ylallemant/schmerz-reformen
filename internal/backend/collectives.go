@@ -94,15 +94,17 @@ func (a *API) registerCollectiveRoutes(api huma.API) {
 		OperationID: "staff-create-member",
 		Method:      http.MethodPost,
 		Path:        "/v1/staff/collectives/{id}/members",
-		Summary:     "Add a member organisation",
-		Tags:        []string{"Console"},
+		Summary:     "Add an organisation to a collective",
+		Description: "The organisation must exist already: a new one is proposed through " +
+			"/v1/staff/organisations and exists once enough editors approve it.",
+		Tags: []string{"Console"},
 	})), a.staffCreateMember)
 
 	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
 		OperationID: "staff-save-member",
 		Method:      http.MethodPut,
 		Path:        "/v1/staff/members/{id}",
-		Summary:     "Change a member organisation",
+		Summary:     "Move an organisation in a collective's list",
 		Tags:        []string{"Console"},
 	})), a.staffSaveMember)
 
@@ -110,7 +112,8 @@ func (a *API) registerCollectiveRoutes(api huma.API) {
 		OperationID: "staff-delete-member",
 		Method:      http.MethodDelete,
 		Path:        "/v1/staff/members/{id}",
-		Summary:     "Remove a member organisation",
+		Summary:     "Take an organisation out of a collective",
+		Description: "The organisation itself stays: it may be a member of other collectives.",
 		Tags:        []string{"Console"},
 	})), a.staffDeleteMember)
 }
@@ -131,14 +134,18 @@ func toCollectiveRef(c models.Collective) *CollectiveRef {
 	return &CollectiveRef{ID: c.ID, Name: c.Name, Slug: c.Slug, LogoID: c.LogoID}
 }
 
-// MemberItem is one organisation in a collective.
+// MemberItem is one organisation in a collective: the membership's own
+// identifier and position, and the organisation's name, kind, site, logo and
+// place.
 type MemberItem struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Kind     string `json:"kind"`
-	Website  string `json:"website,omitempty"`
-	LogoID   string `json:"logo_id,omitempty"`
-	Position int    `json:"position"`
+	ID             string `json:"id"`
+	OrganisationID string `json:"organisation_id"`
+	Name           string `json:"name"`
+	Kind           string `json:"kind"`
+	Website        string `json:"website,omitempty"`
+	LogoID         string `json:"logo_id,omitempty"`
+	Place          string `json:"place,omitempty"`
+	Position       int    `json:"position"`
 }
 
 // CollectiveItem is a collective on the wire.
@@ -198,9 +205,12 @@ func toCollectiveItem(c models.Collective) CollectiveItem {
 }
 
 func toMemberItem(m models.CollectiveMember) MemberItem {
+	organisation := m.Organisation
 	return MemberItem{
-		ID: m.ID, Name: m.Name, Kind: string(m.Kind),
-		Website: m.Website, LogoID: m.LogoID, Position: m.Position,
+		ID: m.ID, OrganisationID: m.OrganisationID,
+		Name: organisation.Name, Kind: string(organisation.Kind),
+		Website: organisation.Website, LogoID: organisation.LogoID,
+		Place: organisation.Location.Label, Position: m.Position,
 	}
 }
 

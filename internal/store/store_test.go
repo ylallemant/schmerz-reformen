@@ -2,16 +2,19 @@ package store
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ylallemant/schmerz-reformen/internal/models"
+	"github.com/ylallemant/schmerz-reformen/internal/store/storetest"
+	gormschema "gorm.io/gorm/schema"
 )
 
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(Options{Driver: DriverSQLite, DSN: filepath.Join(t.TempDir(), "test.db")})
+	driver, dsn := storetest.Database(t)
+	s, err := Open(Options{Driver: Driver(driver), DSN: dsn})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -170,5 +173,32 @@ func TestEnumValidation(t *testing.T) {
 	}
 	if !DriverSQLite.Valid() || Driver("mysql").Valid() {
 		t.Error("Driver.Valid does not match the supported engines")
+	}
+}
+
+// portableTypes are the column types a model may pin explicitly: the ones
+// both engines spell the same way. Everything else is left to GORM, which
+// picks per dialect — a []byte is bytea on PostgreSQL and blob on SQLite.
+var portableTypes = map[string]bool{"text": true}
+
+// TestSchemaPinsOnlyPortableTypes refuses a column type only one engine has.
+//
+// `type:blob` passed every test here — SQLite has it — and stopped the first
+// PostgreSQL migration dead. The PostgreSQL run in CI catches that too, but
+// only where it is configured; this catches it in every `go test`.
+func TestSchemaPinsOnlyPortableTypes(t *testing.T) {
+	cache := &sync.Map{}
+	for _, model := range schema() {
+		parsed, err := gormschema.Parse(model, cache, gormschema.NamingStrategy{})
+		if err != nil {
+			t.Fatalf("parse %T: %v", model, err)
+		}
+		for _, field := range parsed.Fields {
+			pinned := strings.ToLower(field.TagSettings["TYPE"])
+			if pinned != "" && !portableTypes[pinned] {
+				t.Errorf("%s.%s pins type %q, which is not portable between PostgreSQL and SQLite: drop the tag and let GORM choose",
+					parsed.Name, field.Name, pinned)
+			}
+		}
 	}
 }

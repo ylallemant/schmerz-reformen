@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
@@ -72,6 +73,8 @@ func Definition() cli.Definition {
 			config.RegisterAuthFlags(cmd)
 			// What makes the console believable, and who administers.
 			config.RegisterStaffFlags(cmd)
+			// How many editors must agree before an organisation changes.
+			config.RegisterCurationFlags(cmd)
 			config.RegisterNotificationFlags(cmd)
 		},
 		Setup: Setup,
@@ -137,6 +140,10 @@ type API struct {
 
 	// adminGroup is the identity-provider group that may do everything.
 	adminGroup string
+
+	// approvals is how many editors other than its author must approve a
+	// change to an organisation, and how many rejections close one.
+	approvals int
 
 	// development mirrors the --development flag: an editor's identity is
 	// believed without a token when none is configured.
@@ -232,6 +239,13 @@ func Setup(svc *service.Service, common config.Common) error {
 		log.Info().Msg("web push is off: notifications are written to the list and not delivered")
 	}
 
+	approvals, err := config.LoadOrganisationApprovals()
+	if err != nil {
+		return err
+	}
+	log.Info().Int("approvals", approvals).
+		Msg("a change to an organisation needs this many approvals from editors other than its author")
+
 	staffConfig := config.LoadStaff()
 	switch {
 	case staffConfig.Token != "":
@@ -261,6 +275,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		geocoder:    geocoder,
 		staffToken:  staffConfig.Token,
 		adminGroup:  staffConfig.AdminGroup,
+		approvals:   approvals,
 		development: common.Development,
 	}
 
@@ -290,21 +305,31 @@ func (a *API) registerRoutes(svc *service.Service) {
 	// inside each handler: a route declares what it needs, and a route copied
 	// from another cannot forget to enforce it.
 	svc.API().UseMiddleware(a.authenticate(svc.API()))
+	a.registerOperations(svc.API())
+}
 
-	a.registerAccountRoutes(svc.API())
-	a.registerLinkRoutes(svc.API())
-	a.registerNotificationRoutes(svc.API())
-	a.registerThemeRoutes(svc.API())
-	a.registerThemeAssetRoutes(svc.API())
+// registerOperations puts every operation on an API.
+//
+// One list, used by the service and by the tests that check every route's
+// declarations: a second copy of it in a test would be a list a new route can
+// be left out of, and the route would then be checked by nothing.
+func (a *API) registerOperations(api huma.API) {
+	a.registerAccountRoutes(api)
+	a.registerLinkRoutes(api)
+	a.registerNotificationRoutes(api)
+	a.registerThemeRoutes(api)
+	a.registerThemeAssetRoutes(api)
 
-	a.registerCollectiveRoutes(svc.API())
-	a.registerTopicRoutes(svc.API())
-	a.registerUpdateRoutes(svc.API())
-	a.registerActionRoutes(svc.API())
-	a.registerMapRoutes(svc.API())
-	a.registerFollowRoutes(svc.API())
-	a.registerMediaRoutes(svc.API())
-	a.registerStaffRoutes(svc.API())
+	a.registerCollectiveRoutes(api)
+	a.registerOrganisationRoutes(api)
+	a.registerChangeRoutes(api)
+	a.registerTopicRoutes(api)
+	a.registerUpdateRoutes(api)
+	a.registerActionRoutes(api)
+	a.registerMapRoutes(api)
+	a.registerFollowRoutes(api)
+	a.registerMediaRoutes(api)
+	a.registerStaffRoutes(api)
 }
 
 // sweepInterval is how often expired rows are removed. Nothing depends on the

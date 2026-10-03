@@ -18,6 +18,26 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # Production runs PostgreSQL and development SQLite. With this service
+    # every store and backend test runs on PostgreSQL here — each in a schema
+    # of its own — so a type or query only one engine accepts fails in CI
+    # rather than in the first deployment. See internal/store/storetest.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: schmerz
+          POSTGRES_PASSWORD: schmerz
+          POSTGRES_DB: schmerz
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U schmerz"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SCHMERZ_TEST_POSTGRES_DSN: postgres://schmerz:schmerz@localhost:5432/schmerz?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

@@ -16,6 +16,14 @@ const (
 	// AuditConfigChange is a change to the installation rather than to
 	// content: the active theme, an uploaded image.
 	AuditConfigChange AuditAction = "config_change"
+
+	// The curation of organisations: a change proposed, a vote on it, a
+	// change taken back by its author. When a change is applied, its effect
+	// is recorded as a create, update or delete against its author's name.
+	AuditPropose  AuditAction = "propose"
+	AuditApprove  AuditAction = "approve"
+	AuditReject   AuditAction = "reject"
+	AuditWithdraw AuditAction = "withdraw"
 )
 
 // AuditEntry records one write made through the console.
@@ -47,7 +55,7 @@ type AuditEntry struct {
 	Action AuditAction `gorm:"index;size:32" json:"action"`
 
 	// SubjectType and SubjectID say what was acted on: "collective", "member",
-	// "topic", "update", "action", "theme".
+	// "organisation", "topic", "update", "action", "theme".
 	SubjectType string `gorm:"index;size:32" json:"subject_type"`
 	SubjectID   string `gorm:"index;size:36" json:"subject_id"`
 
