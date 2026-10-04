@@ -129,7 +129,10 @@ func TestAnExpiredSessionIsNoSession(t *testing.T) {
 // exceptions listed, because the page somebody forgets to guard is the one
 // that needed it.
 func TestEveryPageNeedsASignIn(t *testing.T) {
-	c := &console{sealer: testSealer(t, "secret")}
+	// An identity provider is configured: what is being tested is what
+	// needs a session, not the locked console (see
+	// TestAConsoleWithNoIdentityProviderIsLocked).
+	c := &console{sealer: testSealer(t, "secret"), signIn: &signIn{}}
 	reached := false
 	guarded := c.requireSignIn(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		reached = true
@@ -200,29 +203,6 @@ func TestAfterSigningInYouStayOnThisSite(t *testing.T) {
 	} {
 		if got := safeNext(next); got != want {
 			t.Errorf("safeNext(%q) = %q, want %q", next, got, want)
-		}
-	}
-}
-
-// TestNoGroupsIsTheSafeReading: an editor in no group manages nothing, where
-// a claim misread as "everything" would be the opposite.
-func TestNoGroupsIsTheSafeReading(t *testing.T) {
-	for name, tc := range map[string]struct {
-		claim any
-		want  []string
-	}{
-		"a list":              {[]any{"duesseldorf", "schmerz-admins"}, []string{"duesseldorf", "schmerz-admins"}},
-		"one name on its own": {"duesseldorf", []string{"duesseldorf"}},
-		"padded names":        {[]any{"  duesseldorf  ", ""}, []string{"duesseldorf"}},
-		"absent":              {nil, nil},
-		"a number":            {42, nil},
-		"a map":               {map[string]any{"admin": true}, nil},
-		"a list of maps":      {[]any{map[string]any{"name": "duesseldorf"}}, nil},
-		"true":                {true, nil},
-	} {
-		got := groupsFrom(tc.claim)
-		if strings.Join(got, "|") != strings.Join(tc.want, "|") {
-			t.Errorf("%s: groups = %v, want %v", name, got, tc.want)
 		}
 	}
 }

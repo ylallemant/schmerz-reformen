@@ -78,6 +78,14 @@ var changesNothingCached = map[string]string{
 	"staff-propose-organisation-logo":         "a proposal, applied only by a vote",
 	"staff-propose-organisation-logo-removal": "a proposal, applied only by a vote",
 	"staff-withdraw-change":                   "closes a proposal that changed nothing",
+
+	// The identity provider: who may use the console. Nothing a reader sees
+	// is cached by who edits it.
+	"console-provision-auth": "the console's own sign-in configuration",
+	"staff-invite-person":    "the directory, not the site's content",
+	"staff-set-person-roles": "the directory, not the site's content",
+	"staff-relink-person":    "the directory, not the site's content",
+	"staff-remove-person":    "the directory, not the site's content",
 }
 
 // TestEveryWriteSaysWhatItMakesWrong is the test that stops the next endpoint

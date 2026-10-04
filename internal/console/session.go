@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
 	"github.com/ylallemant/schmerz-reformen/internal/web"
 )
@@ -25,18 +27,18 @@ const (
 	flowCookie = "schmerz_console_flow"
 )
 
-// sessionLifetime is how long a sign-in lasts.
+// sessionLifetime is how long a sign-in lasts: a working day.
 //
-// It is also how long a change of groups takes to land. The console keeps no
-// table of editors and asks the identity provider nothing between sign-ins, so
-// somebody removed from a collective's group this morning can still edit it
-// until their session ends. Eight hours is a working day: long enough that
-// nobody signs in twice, short enough that "tomorrow they cannot" is true.
-//
-// Removing somebody *now* is done where their access actually lives — the
-// identity provider can end their session there, and rotating --session-secret
-// ends everybody's here.
+// It is **not** how long a change of groups takes to land. What an editor may
+// do is decided by the backend, which asks the directory — at most a minute
+// behind for a read, never behind for a write. The groups kept in the cookie
+// only decide which menus are drawn, and are refreshed every few minutes (see
+// groupsRefresh).
 const sessionLifetime = 8 * time.Hour
+
+// groupsRefresh is how often the console asks again what a signed-in editor
+// may do, so its menus follow a change made in the directory.
+const groupsRefresh = 5 * time.Minute
 
 // flowLifetime is how long somebody has to finish signing in. It covers
 // typing a password and finding a phone, and not much else.
@@ -126,6 +128,10 @@ func (s *sealer) sign(payload string) string {
 type signedIn struct {
 	Identity staffauth.Identity `json:"identity"`
 	Expires  time.Time          `json:"expires"`
+
+	// CheckedAt is when the groups in Identity were last read from the
+	// backend.
+	CheckedAt time.Time `json:"checked_at"`
 }
 
 // flow is the content of the cookie that carries a sign-in from the moment it
@@ -183,13 +189,43 @@ func (c *console) clearCookie(w http.ResponseWriter, name string) {
 
 // startSession signs an editor in.
 func (c *console) startSession(w http.ResponseWriter, identity staffauth.Identity) error {
-	expires := time.Now().Add(sessionLifetime)
-	sealed, err := c.sealer.seal(signedIn{Identity: identity, Expires: expires})
+	return c.writeSession(w, signedIn{
+		Identity: identity, Expires: time.Now().Add(sessionLifetime), CheckedAt: time.Now(),
+	})
+}
+
+func (c *console) writeSession(w http.ResponseWriter, session signedIn) error {
+	sealed, err := c.sealer.seal(session)
 	if err != nil {
 		return err
 	}
-	c.setCookie(w, sessionCookie, sealed, expires)
+	c.setCookie(w, sessionCookie, sealed, session.Expires)
 	return nil
+}
+
+// refreshed brings a session's groups up to date when they are older than
+// groupsRefresh, rewriting the cookie. The expiry is kept: refreshing groups
+// is not signing in again.
+//
+// A backend that cannot answer leaves the groups as they were — they decide
+// only what is drawn, and the backend decides everything else on every
+// request anyway.
+func (c *console) refreshed(w http.ResponseWriter, r *http.Request, identity staffauth.Identity) staffauth.Identity {
+	session, ok := c.sessionOf(r)
+	if !ok || time.Since(session.CheckedAt) < groupsRefresh {
+		return identity
+	}
+	profile, err := c.profileOf(r.Context(), identity)
+	if err != nil {
+		log.Debug().Err(err).Msg("cannot refresh an editor's groups; keeping the ones in the session")
+		return identity
+	}
+	session.Identity.Groups = profile.Groups
+	session.CheckedAt = time.Now()
+	if err := c.writeSession(w, session); err != nil {
+		log.Error().Err(err).Msg("cannot rewrite a console session")
+	}
+	return session.Identity
 }
 
 // identityOf returns who is signed in on a request.
@@ -203,18 +239,25 @@ func (c *console) identityOf(r *http.Request) (staffauth.Identity, bool) {
 		return c.standIn(r), true
 	}
 
+	session, ok := c.sessionOf(r)
+	return session.Identity, ok
+}
+
+// sessionOf reads the session cookie, refusing one that is not ours or has
+// expired.
+func (c *console) sessionOf(r *http.Request) (signedIn, bool) {
 	cookie, err := r.Cookie(sessionCookie)
 	if err != nil {
-		return staffauth.Identity{}, false
+		return signedIn{}, false
 	}
 	var session signedIn
 	if err := c.sealer.open(cookie.Value, &session); err != nil {
-		return staffauth.Identity{}, false
+		return signedIn{}, false
 	}
 	if time.Now().After(session.Expires) || session.Identity.Subject == "" {
-		return staffauth.Identity{}, false
+		return signedIn{}, false
 	}
-	return session.Identity, true
+	return session, true
 }
 
 // randomToken returns an unguessable value for a state, a nonce or a verifier.

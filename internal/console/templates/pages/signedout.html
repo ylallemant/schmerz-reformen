@@ -1,8 +1,18 @@
 {{define "content"}}
 <div class="prose">
-  {{ if .Failed }}
+  {{ if .Refused }}
+  {{/* The account is named: the commonest cause is being signed in to the
+       identity provider as somebody else, and "you hold no role" alone sends
+       people looking for a missing role instead. */}}
   <h1>{{ .T "auth.failed_title" }}</h1>
-  <p class="lede">{{ .T "auth.failed" }}</p>
+  <p class="lede">{{ .Tf "auth.refused" "Account" .Refused }}</p>
+  <p class="section-note">{{ .T "auth.refused_hint" }}</p>
+  {{ else if eq .Reason "auth.locked" }}
+  <h1>{{ .T "auth.locked_title" }}</h1>
+  <p class="lede">{{ .T "auth.locked" }}</p>
+  {{ else if .Failed }}
+  <h1>{{ .T "auth.failed_title" }}</h1>
+  <p class="lede">{{ if .Reason }}{{ .T .Reason }}{{ else }}{{ .T "auth.failed" }}{{ end }}</p>
   {{ else }}
   <h1>{{ .T "auth.signed_out_title" }}</h1>
   <p class="lede">{{ .T "auth.signed_out" }}</p>
@@ -10,6 +20,8 @@
        sign-in goes straight through without asking for a password. */}}
   <p class="section-note">{{ .T "auth.provider_session" }}</p>
   {{ end }}
+  {{ if ne .Reason "auth.locked" }}
   <p><a class="button" href="/auth/login">{{ .T "auth.sign_in" }}</a></p>
+  {{ end }}
 </div>
 {{end}}

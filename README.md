@@ -46,7 +46,19 @@ that group manages its content. A collective adds and removes its content
 creators where its people already are.
 
 Members of one further group — `schmerz-admins` by default — administer the
-installation: they create collectives and assign each its group.
+installation: they create collectives, assign each its group, and add people
+from the console's **People** page.
+
+The console sets itself up in Authentik. On first start it is **locked** —
+nobody can sign in — and a setup wizard waits on its *maintenance* port, which
+is never published. Given an Authentik address and a one-off API token, it
+creates the OAuth2 provider, the application, the administrators' group, a
+recovery flow if Authentik has none, and a token of the backend's own; the
+pasted token is spent once and may expire. From then on **what an editor may
+do is read from Authentik by the backend** on every request, never from the
+sign-in token, and people are handed a single-use link to set up a passkey —
+no password, no email. The directory token stays in the backend; the console
+holds nothing but the OAuth client secret.
 
 Content is published without review. The other half of that bargain is the
 **audit log**: every change made through the console is recorded against the
@@ -182,6 +194,12 @@ Models never pin a column type other than `text`; a test enforces it, because
 GORM already picks the right one per engine (`[]byte` is `bytea` on
 PostgreSQL, `blob` on SQLite).
 
+`-sso` runs the console as production does, signing editors in through
+Authentik instead of `--development` — set `SCHMERZ_OIDC_ISSUER` (in
+`test/.env` or the shell) to your Authentik and the setup wizard offers it;
+the runner prints where the wizard is. `-superuser` reopens the wizard on a run
+that is already set up.
+
 With authentication off everybody is the same stand-in editor, and nobody may
 approve their own proposal — so the local console offers four stand-ins to
 switch between (*Act as 1 2 3 4* in its navigation). Propose as one, approve
@@ -200,9 +218,11 @@ The settings that matter, each available as a flag, an environment variable
 | `site-url` | all | the public address. **Passkeys are bound to its host for ever.** |
 | `staff-token` | backend, console | the secret that makes the console the console |
 | `organisation-approvals` | backend | approvals a change to an organisation needs from editors other than its author (default 3) |
-| `admin-group` | backend, console | the identity-provider group that administers |
-| `console-url` | console | its own public address; the OIDC redirect is `{console-url}/auth/callback` |
-| `oidc-issuer`, `oidc-client-id`, `oidc-client-secret` | console | the identity provider |
+| `settings-key` | backend | seals the stored identity-provider credentials: `openssl rand -base64 32` |
+| `admin-group` | backend, console | who administers until the wizard has run; afterwards `<name>-admins` |
+| `console-url` | console | its own public address; the wizard registers `{console-url}/auth/callback` |
+| `oidc-issuer` | console | the Authentik address the setup wizard offers (an issuer URL is cut back to the instance) |
+| `superuser` | console | reopens the setup wizard on a configured console, to point it at another directory |
 | `session-secret` | console | signs the console's session cookie |
 | `database-driver`, `database-dsn` | backend | `postgres` and a connection URL |
 | `storage-url` | backend | where logos are kept: `file://…` or `s3://…` |
@@ -210,9 +230,10 @@ The settings that matter, each available as a flag, an environment variable
 | `push-public-key`, `push-private-key`, `push-subject` | backend | Web Push; optional |
 | `geocode-endpoint`, `geocode-contact` | backend | a Nominatim instance of your own |
 
-In Authentik: an OAuth2/OpenID provider for the console with the redirect URI
-above, the `profile` scope (which carries `groups`), one group per collective,
-and one group for administrators.
+In Authentik, nothing by hand: start the console, open
+`http://<console>:<maintenance-port>/setup` through the cluster, and paste an
+API token (*Directory → Tokens and App passwords*, intent *API Token*). A
+collective's group is created in Authentik when an administrator names it.
 
 ## Design decisions
 

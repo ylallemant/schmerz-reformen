@@ -1,0 +1,124 @@
+{{define "content"}}
+{{ $page := . }}
+<h1>{{ .T "people.title" }}</h1>
+<p class="lede">{{ .T "people.lede" }}</p>
+
+{{/* Shown once, straight after it was minted, and kept nowhere: a page an
+     administrator could revisit to re-read somebody's way in is a page anybody
+     who reaches this console could revisit. */}}
+{{ with .WayIn }}
+<div class="form-notice" role="status">
+  {{ if .Adopted }}
+  {{/* An account the directory had already: given the roles as it is, and
+       signing in with what it has. No link was minted unasked — one would let
+       whoever held it replace credentials that are the person's own. */}}
+  <p>{{ $page.Tf "people.adopted" "Username" .Username }}</p>
+  <p class="hint">{{ $page.T "people.adopted_hint" }}</p>
+  {{ else }}
+  <p>{{ $page.Tf "people.way_in" "Username" .Username }}</p>
+  <p><code class="mono wrap-anywhere">{{ .Link }}</code></p>
+  <p class="hint">{{ $page.T "people.way_in_once" }}</p>
+  {{ end }}
+</div>
+{{ end }}
+
+{{/* A warning, not a notice: nothing has gone wrong yet, and nobody can be
+     onboarded until it is fixed. */}}
+{{ if and .People.AdminGroup (not .People.RecoveryReady) }}
+<p class="warning" role="status">{{ .T "people.no_recovery" }}</p>
+{{ end }}
+
+{{ if .People.People }}
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "people.person" }}</th>
+        <th scope="col">{{ .T "people.admin" }}</th>
+        <th scope="col">{{ .T "people.collectives" }}</th>
+        <th scope="col" class="actions-column"><span class="visually-hidden">{{ .T "people.actions" }}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range .People.People }}
+      {{ $person := . }}
+      <tr>
+        <td>
+          <strong>{{ .Name }}</strong><br>
+          <span class="hint mono">{{ .Username }}</span>
+          {{ if .Self }}<br><span class="hint">{{ $page.T "people.you" }}</span>{{ end }}
+          {{/* The forms are empty and out of the way: a <form> cannot span
+               table cells, so the controls in the other columns name theirs
+               with the `form` attribute. */}}
+          <form id="roles-{{ .PK }}" method="post" action="/settings/people"></form>
+        </td>
+        <td>
+          <label class="check"><input type="checkbox" form="roles-{{ .PK }}" name="admin" value="1"{{ if .Admin }} checked{{ end }}>
+            {{ $page.T "people.admin" }}</label>
+        </td>
+        <td>
+          {{ range $page.People.Collectives }}
+          <label class="check"><input type="checkbox" form="roles-{{ $person.PK }}" name="collective" value="{{ .ID }}"{{ if $person.Edits .ID }} checked{{ end }}>
+            {{ .Name }}</label>
+          {{ end }}
+        </td>
+        <td class="actions-column">
+          <input type="hidden" form="roles-{{ .PK }}" name="pk" value="{{ .PK }}">
+          <input type="hidden" form="roles-{{ .PK }}" name="username" value="{{ .Username }}">
+          <div class="button-row">
+            <button class="button secondary small" type="submit" form="roles-{{ .PK }}" name="action" value="roles">{{ $page.T "people.save_roles" }}</button>
+            {{ if not .Self }}
+            <form method="post" action="/settings/people">
+              <input type="hidden" name="pk" value="{{ .PK }}">
+              <input type="hidden" name="username" value="{{ .Username }}">
+              <button class="button secondary small" type="submit" name="action" value="relink">{{ $page.T "people.new_link" }}</button>
+            </form>
+            {{/* Not drawn on your own row; the backend refuses it there too,
+                 because a hidden control is not a guard. */}}
+            <form method="post" action="/settings/people" data-confirm="{{ $page.T "people.remove_confirm" }}">
+              <input type="hidden" name="pk" value="{{ .PK }}">
+              <input type="hidden" name="username" value="{{ .Username }}">
+              <button class="button danger small" type="submit" name="action" value="remove">{{ $page.T "people.remove" }}</button>
+            </form>
+            {{ end }}
+          </div>
+        </td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ else if .People.AdminGroup }}
+<p class="empty">{{ .T "people.empty" }}</p>
+{{ end }}
+
+{{ if .People.AdminGroup }}
+<form method="post" action="/settings/people" class="prose">
+  <h2 id="add">{{ .T "people.add_title" }}</h2>
+  {{/* No password and no email: the way in is a single-use link the
+       administrator passes on, ending with the person's own passkey. */}}
+  <p class="section-note">{{ .T "people.add_note" }}</p>
+  <div class="field-row">
+    <div>
+      <label for="person-name">{{ .T "people.name" }}</label>
+      <input type="text" id="person-name" name="name" maxlength="120" required value="{{ .Draft.Name }}">
+    </div>
+    <div>
+      <label for="person-username">{{ .T "people.username" }}</label>
+      <input type="text" id="person-username" name="username" maxlength="150" required autocomplete="off" value="{{ .Draft.Username }}">
+    </div>
+  </div>
+  <fieldset class="fieldset">
+    <legend>{{ .T "people.roles" }}</legend>
+    <label class="check"><input type="checkbox" name="admin" value="1"{{ if .Draft.Admin }} checked{{ end }}>
+      {{ .T "people.admin_role" }}</label>
+    {{ range .People.Collectives }}
+    <label class="check"><input type="checkbox" name="collective" value="{{ .ID }}"{{ if $page.Draft.Has .ID }} checked{{ end }}>
+      {{ $page.Tf "people.editor_of" "Collective" .Name }}</label>
+    {{ end }}
+    {{ if not .People.Collectives }}<p class="hint">{{ .T "people.no_collective_groups" }}</p>{{ end }}
+  </fieldset>
+  <button class="button" type="submit" name="action" value="invite">{{ .T "people.add" }}</button>
+</form>
+{{ end }}
+{{end}}

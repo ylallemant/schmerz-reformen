@@ -47,6 +47,7 @@ func newAPI(t *testing.T) *API {
 		cache:      cache.New(cache.DefaultTTL, cache.DefaultLimit),
 		phrases:    phrasesFor("de"),
 		adminGroup: config.DefaultAdminGroup,
+		directory:  &directory{},
 		approvals:  config.DefaultOrganisationApprovals,
 		siteURL:    "http://localhost:8401",
 	}

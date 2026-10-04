@@ -50,6 +50,23 @@ type Service struct {
 
 	// ConsoleURL is where the console answers, for the console itself.
 	ConsoleURL string
+
+	// SSO runs the service without --development: the console then signs
+	// editors in through the identity provider its setup wizard provisioned,
+	// as it does in production.
+	SSO bool
+
+	// Superuser reopens the console's setup wizard on a run that is already
+	// provisioned.
+	Superuser bool
+
+	// StaffToken is the secret the console and the backend share. Empty runs
+	// the backend believing the console without one, which only
+	// --development allows.
+	StaffToken string
+
+	// SettingsKey seals the identity provider's credentials in the backend.
+	SettingsKey string
 }
 
 // Process is a started service.
@@ -70,16 +87,19 @@ type Process struct {
 // Start launches a service with `go run`, wiring its output to the terminal
 // and to a transcript file.
 func Start(root string, dir RunDir, svc Service, logLevel string, env []string) (*Process, error) {
-	args := []string{
-		"run", "./cmd/" + svc.Name,
+	args := []string{"run", "./cmd/" + svc.Name}
+	if !svc.SSO {
 		// Local only: this is what disables authentication.
-		"--development",
+		args = append(args, "--development")
+	}
+	args = append(args,
 		"--log-level", logLevel,
 		"--log-file", dir.LogPath(svc.Name),
 		"--app-port", fmt.Sprint(svc.AppPort),
 		"--maintenance-port", fmt.Sprint(svc.MaintenancePort),
-	}
+	)
 	args = append(args, databaseArgs(svc, dir)...)
+	args = append(args, authArgs(svc)...)
 	if svc.BackendURL != "" {
 		args = append(args, "--backend-url", svc.BackendURL)
 	}
@@ -142,6 +162,22 @@ func databaseArgs(svc Service, dir RunDir) []string {
 		// Uploads are written here rather than into the working tree.
 		"--storage-url", dir.StorageURL(),
 	}
+}
+
+// authArgs are the flags about who is believed: the shared secret, the key
+// the backend seals credentials with, and the door back into setup.
+func authArgs(svc Service) []string {
+	var args []string
+	if svc.StaffToken != "" {
+		args = append(args, "--staff-token", svc.StaffToken)
+	}
+	if svc.SettingsKey != "" {
+		args = append(args, "--settings-key", svc.SettingsKey)
+	}
+	if svc.Superuser {
+		args = append(args, "--superuser")
+	}
+	return args
 }
 
 // Done is closed once the service has exited.

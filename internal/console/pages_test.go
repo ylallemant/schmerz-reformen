@@ -1,6 +1,7 @@
 package console
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -158,6 +159,16 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 			http.Error(w, `{"detail":"no such change"}`, http.StatusNotFound)
 		}
 	})
+	mux.HandleFunc("GET /v1/staff/people", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, apiclient.People{
+			AdminGroup: "schmerz-admins", RecoveryReady: false,
+			Collectives: []apiclient.PeopleCollective{{ID: "c1", Name: hostile, Group: hostile}},
+			People: []apiclient.Person{
+				{PK: 7, Username: hostile, Name: hostile, Admin: true, Collectives: []string{"c1"}, Self: true},
+				{PK: 8, Username: "kai", Name: hostile, Collectives: []string{}},
+			},
+		})
+	})
 	mux.HandleFunc("GET /v1/staff/audit", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, map[string]any{"total": 120, "entries": []apiclient.AuditEntry{{
 			ID: "e1", At: when, Actor: hostile, ActorName: hostile, Action: "publish",
@@ -186,6 +197,21 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("POST /v1/staff/collectives/{id}/actions", write(action))
 	mux.HandleFunc("PUT /v1/staff/actions/{id}", write(action))
 	mux.HandleFunc("POST /v1/staff/collectives/{id}/members", write(collective.Members[0]))
+	mux.HandleFunc("POST /v1/staff/people", func(w http.ResponseWriter, r *http.Request) {
+		// Somebody the directory has already is adopted, with no link.
+		var sent struct {
+			Username string `json:"username"`
+		}
+		json.NewDecoder(r.Body).Decode(&sent) //nolint:errcheck
+		if sent.Username == "existing" && !refuse {
+			answer(w, apiclient.WayIn{Username: "existing", Adopted: true})
+			return
+		}
+		write(apiclient.WayIn{Username: "kai", Link: "https://auth.example/if/flow/recovery/?token=once"})(w, r)
+	})
+	mux.HandleFunc("POST /v1/staff/people/{pk}/link", write(apiclient.WayIn{Username: "kai", Link: "https://auth.example/if/flow/recovery/?token=again"}))
+	mux.HandleFunc("PUT /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
+	mux.HandleFunc("DELETE /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("POST /v1/staff/organisations", write(change))
 	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(change))
 	mux.HandleFunc("POST /v1/staff/organisations/{id}/deletion", write(change))
@@ -206,6 +232,8 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		if r.Method != http.MethodGet {
 			raw, _ := io.ReadAll(r.Body)
 			json.Unmarshal(raw, &entry.Body) //nolint:errcheck // an empty body is simply nil
+			// Put back, for a handler that answers by what was sent.
+			r.Body = io.NopCloser(bytes.NewReader(raw))
 			log.add(entry)
 		}
 		mux.ServeHTTP(w, r)
@@ -219,6 +247,17 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 // served builds the whole console on a router of its own, signed in as the
 // development identity.
 func served(t *testing.T, backendURL string, groups ...string) http.Handler {
+	t.Helper()
+	c := testConsole(t, backendURL, groups...)
+	mux := http.NewServeMux()
+	if err := c.registerRoutes(mux); err != nil {
+		t.Fatalf("registerRoutes: %v", err)
+	}
+	return web.SecurityHeaders()(c.requireSignIn(mux))
+}
+
+// testConsole builds the console, signed in as the development identity.
+func testConsole(t *testing.T, backendURL string, groups ...string) *console {
 	t.Helper()
 
 	backend, err := apiclient.New(backendURL)
@@ -259,12 +298,7 @@ func served(t *testing.T, backendURL string, groups ...string) http.Handler {
 			Subject: "sub-dominique", Name: "Dominique", Groups: groups,
 		},
 	}
-
-	mux := http.NewServeMux()
-	if err := c.registerRoutes(mux); err != nil {
-		t.Fatalf("registerRoutes: %v", err)
-	}
-	return web.SecurityHeaders()(c.requireSignIn(mux))
+	return c
 }
 
 func get(t *testing.T, handler http.Handler, path string) (*http.Response, string) {
@@ -345,6 +379,8 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/audit"},
 		{path: "/audit?page=2"},
 		{path: "/settings/theme", plain: true},
+		{path: "/settings/people"},
+		{path: "/settings/people#de"},
 		{path: "/auth/signed-out", plain: true},
 		{path: "/auth/signed-out?failed=1", plain: true},
 		{path: "/#en"},

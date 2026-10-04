@@ -146,6 +146,14 @@ func (a *API) authenticate(api huma.API) func(huma.Context, func(huma.Context)) 
 			}
 		}
 
+		// The console's own routes, made before anybody is signed in.
+		if required, _ := ctx.Operation().Metadata[requiresConsole].(bool); required {
+			if status, reason := a.authenticateConsole(ctx); status != 0 {
+				huma.WriteErr(api, ctx, status, reason)
+				return
+			}
+		}
+
 		// The console's routes. Resolved only where an operation asks for it:
 		// a reader's request has no business being examined for an editor's
 		// identity, and a route that did not declare itself must not acquire

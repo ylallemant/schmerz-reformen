@@ -14,6 +14,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"github.com/rs/zerolog/log"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
+	"github.com/ylallemant/schmerz-reformen/internal/secret"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -44,12 +45,19 @@ type Options struct {
 	// MaxOpenConns and MaxIdleConns bound the pool. Zero uses the defaults.
 	MaxOpenConns int
 	MaxIdleConns int
+
+	// Secrets seals the credentials stored in rows. Nil stores them in clear,
+	// which the backend says loudly at startup.
+	Secrets *secret.Box
 }
 
 // Store is the database handle.
 type Store struct {
 	db     *gorm.DB
 	driver Driver
+
+	// secrets seals the identity provider's credentials. See internal/secret.
+	secrets *secret.Box
 }
 
 // Open connects and verifies the connection works before returning it.
@@ -94,7 +102,7 @@ func Open(opts Options) (*Store, error) {
 	}
 
 	log.Info().Str("driver", string(opts.Driver)).Msg("database connected")
-	return &Store{db: db, driver: opts.Driver}, nil
+	return &Store{db: db, driver: opts.Driver, secrets: opts.Secrets}, nil
 }
 
 // DB is the GORM handle.
@@ -142,6 +150,7 @@ func schema() []any {
 		&models.ThemeFile{},
 		&models.ThemeColor{},
 		&models.ThemeAsset{},
+		&models.AuthSettings{},
 	}
 }
 

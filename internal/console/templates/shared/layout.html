@@ -72,6 +72,7 @@
       {{/* Absent, not disabled, for somebody who cannot use it. The backend
            is what refuses; this only spares them a page that says no. */}}
       {{ if .Admin }}
+      {{ template "navlink" dict "Page" . "Href" "/settings/people" "Key" "nav.people" }}
       {{ template "navlink" dict "Page" . "Href" "/settings/theme" "Key" "nav.theme" }}
       {{ end }}
       <span class="nav-spacer"></span>

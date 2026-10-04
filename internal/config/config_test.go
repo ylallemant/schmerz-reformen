@@ -219,3 +219,73 @@ func TestOrganisationApprovals(t *testing.T) {
 		t.Error("zero approvals was accepted: a change would need nobody's agreement")
 	}
 }
+
+func TestTheWizardIsOfferedTheAuthentikInstance(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                          "",
+		"https://auth.example.org":  "https://auth.example.org",
+		"https://auth.example.org/": "https://auth.example.org",
+		" https://auth.example.org/application/o/schmerz/ ": "https://auth.example.org",
+		"http://localhost:9000/application/o/x/":            "http://localhost:9000",
+	} {
+		if got := AuthentikInstance(in); got != want {
+			t.Errorf("AuthentikInstance(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestTheIssuerReachesTheWizardFromTheEnvironment: SCHMERZ_OIDC_ISSUER is how
+// a deployment tells the setup form where Authentik is.
+func TestTheIssuerReachesTheWizardFromTheEnvironment(t *testing.T) {
+	t.Setenv("SCHMERZ_OIDC_ISSUER", "https://auth.example.org/application/o/schmerz/")
+	cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+	Reset()
+	t.Cleanup(Reset)
+	RegisterCommonFlags(cmd, 8080, 8081)
+	RegisterOIDCFlags(cmd)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Bootstrap(cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadOIDC()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AuthentikURL != "https://auth.example.org" {
+		t.Errorf("AuthentikURL = %q, want the instance the issuer is on", got.AuthentikURL)
+	}
+	if got.Superuser {
+		t.Error("--superuser defaulted to on")
+	}
+}
+
+// TestAConsoleStartsKnowingNothingAboutItsIdentityProvider: with no issuer,
+// no session secret, nothing — and without --development — the configuration
+// loads. The console has to start, or the setup wizard that provisions its
+// identity provider would be unreachable on a first install.
+func TestAConsoleStartsKnowingNothingAboutItsIdentityProvider(t *testing.T) {
+	cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+	Reset()
+	t.Cleanup(Reset)
+	RegisterCommonFlags(cmd, 8080, 8081)
+	RegisterOIDCFlags(cmd)
+	cmd.SetArgs(nil)
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if err := Bootstrap(cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := LoadOIDC()
+	if err != nil {
+		t.Fatalf("LoadOIDC with nothing set: %v — the console would not start, and its setup wizard with it", err)
+	}
+	if got.AuthentikURL != "" {
+		t.Errorf("AuthentikURL = %q with nothing set", got.AuthentikURL)
+	}
+}

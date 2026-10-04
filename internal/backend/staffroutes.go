@@ -46,6 +46,10 @@ type StaffMeOutput struct {
 		// a console that read it as "unchanged" would draw different menus.
 		Admin bool `json:"admin"`
 
+		// Groups are the groups the backend decided by: the directory's, once
+		// one is provisioned. The console keeps them to draw its menus.
+		Groups []string `json:"groups"`
+
 		Collectives []CollectiveItem `json:"collectives"`
 
 		// Waiting is how many changes to organisations this editor may vote
@@ -78,6 +82,7 @@ func (a *API) staffMe(ctx context.Context, _ *struct{}) (*StaffMeOutput, error) 
 	out.Body.Subject = who.Subject
 	out.Body.Name = who.Name
 	out.Body.Admin = who.Admin
+	out.Body.Groups = append([]string{}, who.Groups...)
 	out.Body.Collectives = listing.Body.Collectives
 	for _, change := range a.changeItems(ctx, who, pending) {
 		if change.CanVote {

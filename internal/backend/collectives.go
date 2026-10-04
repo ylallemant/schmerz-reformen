@@ -484,6 +484,9 @@ func (a *API) staffCreateCollective(ctx context.Context, in *CreateCollectiveInp
 	}
 
 	a.audit(ctx, who, models.AuditCreate, "collective", collective.ID, collective.ID, collective.Name)
+	// Its editors' group, in the directory, so people can be put in it from
+	// the console rather than by hand in Authentik.
+	a.ensureDirectoryGroup(ctx, collective.AuthGroup)
 	log.Info().Str("collective", collective.ID).Str("slug", collective.Slug).
 		Str("group", collective.AuthGroup).Msg("collective created")
 	return &CollectiveOutput{Body: staffCollectiveItem(*collective)}, nil
@@ -517,6 +520,11 @@ func (a *API) staffSaveCollective(ctx context.Context, in *SaveCollectiveInput) 
 
 	a.audit(ctx, who, statusAction(before, collective.Status), "collective",
 		collective.ID, collective.ID, collective.Name)
+	if who.Admin {
+		// Only an administrator can change the group, so only their saves
+		// can have named a new one.
+		a.ensureDirectoryGroup(ctx, collective.AuthGroup)
+	}
 	return &CollectiveOutput{Body: staffCollectiveItem(collective)}, nil
 }
 

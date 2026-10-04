@@ -8,6 +8,8 @@ package backend
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -21,6 +23,7 @@ import (
 	"github.com/ylallemant/schmerz-reformen/internal/passkey"
 	"github.com/ylallemant/schmerz-reformen/internal/push"
 	"github.com/ylallemant/schmerz-reformen/internal/ratelimit"
+	"github.com/ylallemant/schmerz-reformen/internal/secret"
 	"github.com/ylallemant/schmerz-reformen/internal/service"
 	"github.com/ylallemant/schmerz-reformen/internal/storage"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
@@ -73,6 +76,8 @@ func Definition() cli.Definition {
 			config.RegisterAuthFlags(cmd)
 			// What makes the console believable, and who administers.
 			config.RegisterStaffFlags(cmd)
+			// What the identity provider's stored credentials are sealed with.
+			config.RegisterSecretFlags(cmd)
 			// How many editors must agree before an organisation changes.
 			config.RegisterCurationFlags(cmd)
 			config.RegisterNotificationFlags(cmd)
@@ -138,8 +143,19 @@ type API struct {
 	// content API off unless development is set.
 	staffToken string
 
-	// adminGroup is the identity-provider group that may do everything.
+	// adminGroup is the identity-provider group that may do everything:
+	// --admin-group until the console's wizard provisions a directory, and the
+	// provisioned group from then on. Read through currentAdminGroup.
+	adminMu    sync.RWMutex
 	adminGroup string
+
+	// directory is the provisioned Authentik, which the backend reads editors'
+	// groups from and manages people in. See directory.go.
+	directory *directory
+
+	// provisioned says the console's setup wizard has run. Once it has, an
+	// editor's groups come from the directory and never from the header.
+	provisioned atomic.Bool
 
 	// approvals is how many editors other than its author must approve a
 	// change to an organisation, and how many rejections close one.
@@ -157,10 +173,24 @@ func Setup(svc *service.Service, common config.Common) error {
 		return fmt.Errorf("database configuration: %w", err)
 	}
 
+	// The key the identity provider's credentials are sealed with. Optional,
+	// and said either way: a deployment should know which of the two it is.
+	secrets, err := secret.New(config.LoadSettingsKey())
+	if err != nil {
+		return fmt.Errorf("--%s: %w", config.KeySettingsKey, err)
+	}
+	if secrets.Configured() {
+		log.Info().Msg("stored identity-provider credentials are sealed with --settings-key")
+	} else {
+		log.Warn().Msg("no --settings-key is set: identity-provider credentials are stored in clear, " +
+			"so a database backup carries them")
+	}
+
 	db, err := store.Open(store.Options{
 		Driver:       store.Driver(dbConfig.Driver),
 		DSN:          dbConfig.DSN,
 		MaxOpenConns: dbConfig.MaxConns,
+		Secrets:      secrets,
 	})
 	if err != nil {
 		return err
@@ -275,6 +305,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		geocoder:    geocoder,
 		staffToken:  staffConfig.Token,
 		adminGroup:  staffConfig.AdminGroup,
+		directory:   &directory{},
 		approvals:   approvals,
 		development: common.Development,
 	}
@@ -282,6 +313,8 @@ func Setup(svc *service.Service, common config.Common) error {
 	if err := api.seedThemes(context.Background()); err != nil {
 		return err
 	}
+	// Who the console's editors are, once its setup wizard has said where.
+	api.connectDirectory(context.Background())
 	api.registerRoutes(svc)
 
 	// The backend is only ready while its database is: reporting ready with
@@ -330,6 +363,8 @@ func (a *API) registerOperations(api huma.API) {
 	a.registerFollowRoutes(api)
 	a.registerMediaRoutes(api)
 	a.registerStaffRoutes(api)
+	a.registerAuthRoutes(api)
+	a.registerPeopleRoutes(api)
 }
 
 // sweepInterval is how often expired rows are removed. Nothing depends on the

@@ -3,12 +3,14 @@ package backend
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"slices"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ylallemant/schmerz-reformen/internal/authentik"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
 )
@@ -28,6 +30,22 @@ func staffOnly(op huma.Operation) huma.Operation {
 		op.Metadata = map[string]any{}
 	}
 	op.Metadata[requiresStaff] = true
+	op.Security = append(op.Security, map[string][]string{"staff": {}})
+	return op
+}
+
+// requiresConsole is the operation metadata key that marks a route as the
+// console's own, made before anybody is signed in: reading how it signs
+// people in, and recording what its setup wizard provisioned. The console's
+// secret is required and no editor is — there is nobody to name yet.
+const requiresConsole = "console"
+
+// consoleOnly marks an operation as callable only by the console itself.
+func consoleOnly(op huma.Operation) huma.Operation {
+	if op.Metadata == nil {
+		op.Metadata = map[string]any{}
+	}
+	op.Metadata[requiresConsole] = true
 	op.Security = append(op.Security, map[string][]string{"staff": {}})
 	return op
 }
@@ -101,19 +119,8 @@ func (s *staff) manages(collective models.Collective) bool {
 // then, so a development flag left on by mistake does not also open the
 // content API.
 func (a *API) authenticateStaff(ctx huma.Context) (*staff, int, string) {
-	switch {
-	case a.staffToken != "":
-		presented := ctx.Header(staffauth.TokenHeader)
-		if subtle.ConstantTimeCompare([]byte(presented), []byte(a.staffToken)) != 1 {
-			return nil, http.StatusUnauthorized, "this route belongs to the console"
-		}
-	case a.development:
-		// Believed without a secret, deliberately. See above.
-	default:
-		// No token and not development: there is nothing that could make an
-		// identity believable, so nothing is believed.
-		return nil, http.StatusServiceUnavailable,
-			"the content API is switched off: no staff token is configured"
+	if status, reason := a.authenticateConsole(ctx); status != 0 {
+		return nil, status, reason
 	}
 
 	identity, err := staffauth.Decode(ctx.Header(staffauth.IdentityHeader))
@@ -122,10 +129,69 @@ func (a *API) authenticateStaff(ctx huma.Context) (*staff, int, string) {
 		return nil, http.StatusUnauthorized, "sign in to the console first"
 	}
 
+	// Once the console has provisioned a directory, what somebody may do is
+	// the directory's answer, not the console's: see directory.go. A
+	// development run's stand-ins carry no username and are believed as they
+	// are, which is what lets one person be several editors locally.
+	if a.provisioned.Load() && !(a.development && identity.Username == "") {
+		status, reason := a.groupsFromDirectory(ctx, &identity)
+		if status != 0 {
+			return nil, status, reason
+		}
+	}
+
 	return &staff{
 		Identity: identity,
-		Admin:    slices.Contains(identity.Groups, a.adminGroup),
+		Admin:    slices.Contains(identity.Groups, a.currentAdminGroup()),
 	}, 0, ""
+}
+
+// groupsFromDirectory replaces the groups an identity arrived with by the ones
+// the directory says it has. A write always asks; a read may use an answer up
+// to a minute old.
+func (a *API) groupsFromDirectory(ctx huma.Context, identity *staffauth.Identity) (int, string) {
+	if identity.Username == "" {
+		return http.StatusUnauthorized, "sign in to the console again"
+	}
+
+	fresh := ctx.Method() != http.MethodGet
+	groups, err := a.directory.rolesOf(ctx.Context(), identity.Username, fresh)
+	switch {
+	case errors.Is(err, authentik.ErrTokenRefused):
+		// The backend's own credential, not anything the editor did: said as
+		// the operator's problem. Nobody can act until it is replaced.
+		log.Error().Err(err).Msg("the directory refused the backend's token: no editor can act until it is replaced")
+		return http.StatusServiceUnavailable,
+			"the console's access to the identity provider has been revoked — an operator has to run its setup again"
+	case err != nil:
+		// A directory that cannot be reached refuses, deliberately: carrying
+		// on with what the editor's cookie says is exactly what reading roles
+		// from the directory exists to prevent.
+		log.Error().Err(err).Str("username", identity.Username).Msg("cannot read an editor's groups from the directory")
+		return http.StatusServiceUnavailable, "cannot reach the identity provider to confirm what you may do"
+	}
+	identity.Groups = groups
+	return 0, ""
+}
+
+// authenticateConsole decides whether a request really comes from the
+// console: its shared secret, or development.
+func (a *API) authenticateConsole(ctx huma.Context) (int, string) {
+	switch {
+	case a.staffToken != "":
+		presented := ctx.Header(staffauth.TokenHeader)
+		if subtle.ConstantTimeCompare([]byte(presented), []byte(a.staffToken)) != 1 {
+			return http.StatusUnauthorized, "this route belongs to the console"
+		}
+	case a.development:
+		// Believed without a secret, deliberately. See authenticateStaff.
+	default:
+		// No token and not development: there is nothing that could make a
+		// request believable, so nothing is believed.
+		return http.StatusServiceUnavailable,
+			"the content API is switched off: no staff token is configured"
+	}
+	return 0, ""
 }
 
 // staffOf returns the editor making the request, or nil.

@@ -26,10 +26,15 @@ const (
 	// KeyConsoleURL is where the console answers, as an editor's browser sees it.
 	KeyConsoleURL = "console-url"
 
-	KeyOIDCIssuer       = "oidc-issuer"
-	KeyOIDCClientID     = "oidc-client-id"
-	KeyOIDCClientSecret = "oidc-client-secret"
-	KeyOIDCGroupsClaim  = "oidc-groups-claim"
+	// KeyOIDCIssuer is where the identity provider is. Since the console
+	// provisions itself, it is only what the setup wizard offers as the
+	// Authentik address — an issuer URL is accepted and cut back to the
+	// instance, so SCHMERZ_OIDC_ISSUER can hold either.
+	KeyOIDCIssuer = "oidc-issuer"
+
+	// KeySuperuser reopens the setup wizard on a console that is already
+	// configured. See RegisterOIDCFlags.
+	KeySuperuser = "superuser"
 
 	// KeySessionSecret signs the console's own session cookie.
 	KeySessionSecret = "session-secret"
@@ -81,30 +86,27 @@ func LoadStaff() Staff {
 }
 
 // OIDC is how the console signs its editors in.
+//
+// The client itself — its identifier and secret — is not here: the setup
+// wizard provisions it in Authentik and the backend keeps it, so there is no
+// way to configure a console that the directory knows nothing about.
 type OIDC struct {
-	// Issuer is the provider's issuer URL — for Authentik,
-	// https://auth.example.org/application/o/<application-slug>/.
-	Issuer string
-
-	ClientID     string
-	ClientSecret string
-
-	// RedirectURL is where the provider sends an editor back to. Derived from
-	// the console's own URL rather than configured separately, because one
-	// wrong answer in two places is two bugs.
-	RedirectURL string
-
-	// GroupsClaim is the claim listing an identity's groups. Authentik calls it
-	// "groups" and sends it with the profile scope.
-	GroupsClaim string
+	// AuthentikURL is what the setup wizard offers as the Authentik instance:
+	// --oidc-issuer, cut back to the instance when it is an issuer URL.
+	AuthentikURL string
 
 	// SessionSecret signs the session cookie. Empty means a random one is made
 	// at startup, which signs everybody out on a restart and cannot work
 	// behind more than one replica — the console says so loudly.
 	SessionSecret string
 
-	// ConsoleURL is the console's public origin, without a trailing slash.
+	// ConsoleURL is the console's public origin, without a trailing slash. It
+	// is what the wizard registers the redirect under.
 	ConsoleURL string
+
+	// Superuser reopens the setup wizard on a console that already has an
+	// identity provider.
+	Superuser bool
 
 	// DevelopmentGroups are carried by the stand-in identity when
 	// authentication is off, so the group rules can be exercised locally.
@@ -113,14 +115,23 @@ type OIDC struct {
 
 // RegisterOIDCFlags declares the console's sign-in flags. Only the console
 // registers them: it is the only service an editor's browser ever reaches.
+//
+// # --superuser is not --development
+//
+// They look alike and are opposites in the way that matters. --development
+// switches authentication off, for local work on a console nobody relies on.
+// --superuser switches nothing off: it puts the setup wizard back on the
+// maintenance port of a console that is otherwise running normally, so an
+// operator can point it at a different directory. Folding them together would
+// mean "the identity provider moved" implied "first let everybody in".
 func RegisterOIDCFlags(cmd *cobra.Command) {
 	f := cmd.PersistentFlags()
 	f.String(KeyConsoleURL, defaultConsoleURL,
-		"public URL editors reach the console on; the OIDC redirect is derived from it")
-	f.String(KeyOIDCIssuer, "", "OIDC issuer URL of the identity provider")
-	f.String(KeyOIDCClientID, "", "OIDC client id of the console")
-	f.String(KeyOIDCClientSecret, "", "OIDC client secret of the console")
-	f.String(KeyOIDCGroupsClaim, "groups", "claim that lists an identity's groups")
+		"public URL editors reach the console on; the OIDC redirect is registered under it")
+	f.String(KeyOIDCIssuer, "",
+		"the Authentik instance (or an issuer URL on it) the setup wizard offers")
+	f.Bool(KeySuperuser, false,
+		"reopen the setup wizard on the maintenance port of a console that is already configured")
 	f.String(KeySessionSecret, "",
 		"secret signing the console session cookie; empty makes a random one per start")
 	f.StringSlice(KeyDevelopmentGroups, nil,
@@ -128,22 +139,12 @@ func RegisterOIDCFlags(cmd *cobra.Command) {
 }
 
 // LoadOIDC reads the console's sign-in configuration.
-//
-// With development set, nothing about the provider is required: there is no
-// provider. Without it every field is, and a missing one is refused here
-// rather than at the first sign-in, where the error would appear in an
-// editor's browser and nowhere else.
-func LoadOIDC(development bool) (OIDC, error) {
+func LoadOIDC() (OIDC, error) {
 	o := OIDC{
-		Issuer:        strings.TrimSpace(viper.GetString(KeyOIDCIssuer)),
-		ClientID:      strings.TrimSpace(viper.GetString(KeyOIDCClientID)),
-		ClientSecret:  strings.TrimSpace(viper.GetString(KeyOIDCClientSecret)),
-		GroupsClaim:   strings.TrimSpace(viper.GetString(KeyOIDCGroupsClaim)),
+		AuthentikURL:  AuthentikInstance(viper.GetString(KeyOIDCIssuer)),
 		SessionSecret: viper.GetString(KeySessionSecret),
 		ConsoleURL:    strings.TrimRight(strings.TrimSpace(viper.GetString(KeyConsoleURL)), "/"),
-	}
-	if o.GroupsClaim == "" {
-		o.GroupsClaim = "groups"
+		Superuser:     viper.GetBool(KeySuperuser),
 	}
 	for _, group := range viper.GetStringSlice(KeyDevelopmentGroups) {
 		if group = strings.TrimSpace(group); group != "" {
@@ -155,19 +156,21 @@ func LoadOIDC(development bool) (OIDC, error) {
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
 		return OIDC{}, fmt.Errorf("invalid %s %q: want scheme://host", KeyConsoleURL, o.ConsoleURL)
 	}
-	o.RedirectURL = o.ConsoleURL + "/auth/callback"
-
-	if development {
-		return o, nil
-	}
-	for key, value := range map[string]string{
-		KeyOIDCIssuer:       o.Issuer,
-		KeyOIDCClientID:     o.ClientID,
-		KeyOIDCClientSecret: o.ClientSecret,
-	} {
-		if value == "" {
-			return OIDC{}, fmt.Errorf("%s is required unless --%s is set", key, KeyDevelopment)
-		}
-	}
 	return o, nil
+}
+
+// AuthentikInstance reads an Authentik address out of what somebody put in
+// --oidc-issuer: the instance itself, or an application's issuer URL on it —
+// https://auth.example.org/application/o/<slug>/ — which is what that setting
+// held before the console provisioned itself. Either way the wizard wants the
+// instance.
+func AuthentikInstance(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if at := strings.Index(value, "/application/o/"); at >= 0 {
+		value = value[:at]
+	}
+	return strings.TrimRight(value, "/")
 }

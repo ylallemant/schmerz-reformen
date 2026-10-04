@@ -9,6 +9,8 @@
 //	go run ./test -data latest    # start from a previous run's state
 //	go run ./test -postgres postgres://u:p@localhost:5432/db?sslmode=disable
 //	                              # the backend on PostgreSQL, as in production
+//	go run ./test -sso            # editors sign in through Authentik, as in production
+//	go run ./test -superuser      # reopen the setup wizard on a provisioned run
 //
 // Every run gets its own directory, so one session's logs and database never
 // overwrite the last one's. With -data, no new directory is made at all: the
@@ -59,6 +61,10 @@ func main() {
 		"put example collectives, topics, updates and actions in once the services are up")
 	postgres := flag.String("postgres", "",
 		"run the backend on this PostgreSQL URL instead of the run directory's SQLite file")
+	sso := flag.Bool("sso", false,
+		"sign editors in through Authentik instead of --development: the console's setup wizard provisions it")
+	superuser := flag.Bool("superuser", false,
+		"reopen the console's setup wizard on a run that is already provisioned (implies -sso)")
 	flag.Parse()
 
 	// -latest is shorthand, not a second mechanism: it resolves through the
@@ -76,13 +82,28 @@ func main() {
 		*data = "latest"
 	}
 
-	if err := run(*logLevel, *dynamicPorts, *data, *seeding, *postgres); err != nil {
+	if err := run(options{
+		logLevel: *logLevel, dynamicPorts: *dynamicPorts, data: *data, seeding: *seeding,
+		postgres: *postgres, sso: *sso || *superuser, superuser: *superuser,
+	}); err != nil {
 		fmt.Fprintf(os.Stderr, "\ntest: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(logLevel string, dynamicPorts bool, data string, seeding bool, postgres string) error {
+// options are the runner's flags.
+type options struct {
+	logLevel     string
+	dynamicPorts bool
+	data         string
+	seeding      bool
+	postgres     string
+	sso          bool
+	superuser    bool
+}
+
+func run(opts options) error {
+	logLevel, dynamicPorts, data, seeding, postgres := opts.logLevel, opts.dynamicPorts, opts.data, opts.seeding, opts.postgres
 	root, err := moduleRoot()
 	if err != nil {
 		return err
@@ -151,6 +172,28 @@ func run(logLevel string, dynamicPorts bool, data string, seeding bool, postgres
 		// resume the logs and the storage but not the content.
 		fmt.Println("database:      PostgreSQL, from -postgres")
 	}
+
+	// What the backend seals the identity provider's credentials with, kept
+	// with the run so a resumed run can read what it sealed. And, with -sso,
+	// the secret the console and the backend share: without --development the
+	// console is believed by nothing else.
+	settingsKey, err := harness.SettingsKey(dir)
+	if err != nil {
+		return err
+	}
+	services[0].SettingsKey = settingsKey
+	var staffToken string
+	if opts.sso {
+		if staffToken, err = harness.NewStaffToken(); err != nil {
+			return err
+		}
+		services[0].StaffToken = staffToken
+		services[1].StaffToken = staffToken
+		services[1].SSO = true
+		services[1].Superuser = opts.superuser
+		fmt.Printf("sign-in:       Authentik — the console's setup wizard is at http://localhost:%d/setup "+
+			"until it has run\n", ports.ConsoleMaintenance)
+	}
 	fmt.Println()
 
 	// The launcher owns the shutdown: it catches the interrupt and passes it
@@ -204,7 +247,7 @@ func run(logLevel string, dynamicPorts bool, data string, seeding bool, postgres
 	// straight into the database would exercise nothing and would keep working
 	// long after the path a real editor takes had broken.
 	if seeding {
-		seed(ctx, backendURL, frontendURL)
+		seed(ctx, backendURL, frontendURL, staffToken)
 	}
 
 	select {
@@ -225,10 +268,10 @@ func run(logLevel string, dynamicPorts bool, data string, seeding bool, postgres
 // A development convenience that failed loudly would be worse than one that
 // failed quietly: somebody who asked for fixtures and got none can see that
 // from the count, and the services they actually came for are already up.
-func seed(ctx context.Context, backendURL, origin string) {
+func seed(ctx context.Context, backendURL, origin, staffToken string) {
 	fmt.Println("\nseeding…")
 
-	summary, err := harness.Seed(ctx, backendURL, origin, seedZone, os.Stdout)
+	summary, err := harness.Seed(ctx, backendURL, origin, staffToken, seedZone, os.Stdout)
 	if err != nil {
 		fmt.Printf("seeding failed: %v\n", err)
 		return

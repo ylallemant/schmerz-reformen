@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -32,7 +33,7 @@ import (
 // Assets are the templates, translations and static files, compiled into the
 // binary so the container needs no writable path and nothing to mount.
 //
-//go:embed templates/shared/*.html templates/pages/*.html static locales/*.toml
+//go:embed templates/shared/*.html templates/pages/*.html templates/setup/*.html static locales/*.toml
 var assets embed.FS
 
 // Default ports follow the house convention: 8xxx public, 7xxx internal
@@ -122,10 +123,27 @@ type console struct {
 	// entries to draw. What an editor may actually do is the backend's
 	// decision on every request, and a console that drew an entry it should
 	// not have would produce a refusal, not a breach.
+	adminMu    sync.RWMutex
 	adminGroup string
 
-	// signIn is the OpenID Connect client. Nil in development.
-	signIn *signIn
+	// signIn is the OpenID Connect client: nil in development, and nil until
+	// the setup wizard has provisioned an identity provider — which leaves
+	// the console locked. Read through currentSignIn.
+	signInMu sync.RWMutex
+	signIn   *signIn
+
+	// setupDoor is whether the setup wizard is offered on the maintenance
+	// port, and whether it would replace an identity provider. See setup.go.
+	setupMu   sync.Mutex
+	setupDoor SetupDoor
+
+	// authentikURL is what the wizard offers as the Authentik instance:
+	// --oidc-issuer (SCHMERZ_OIDC_ISSUER), cut back to the instance.
+	authentikURL string
+
+	// consoleURL is where editors reach this console, which the wizard
+	// registers the sign-in redirect under.
+	consoleURL string
 
 	// sealer signs the console's cookies.
 	sealer *sealer
@@ -168,7 +186,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		return err
 	}
 
-	oidcConfig, err := config.LoadOIDC(common.Development)
+	oidcConfig, err := config.LoadOIDC()
 	if err != nil {
 		return fmt.Errorf("sign-in configuration: %w", err)
 	}
@@ -191,6 +209,8 @@ func Setup(svc *service.Service, common config.Common) error {
 		zone:          zone,
 		staffToken:    staffConfig.Token,
 		adminGroup:    staffConfig.AdminGroup,
+		authentikURL:  oidcConfig.AuthentikURL,
+		consoleURL:    oidcConfig.ConsoleURL,
 		sealer:        seal,
 		secureCookies: strings.HasPrefix(oidcConfig.ConsoleURL, "https://"),
 		development:   common.Development,
@@ -216,14 +236,21 @@ func Setup(svc *service.Service, common config.Common) error {
 		if staffConfig.Token == "" {
 			log.Warn().Msg("no --staff-token is set: the backend will refuse every change this console sends")
 		}
-
-		c.signIn, err = newSignIn(context.Background(), oidcConfig)
-		if err != nil {
-			return err
+		if oidcConfig.Superuser {
+			log.Warn().Msg("SUPERUSER MODE: the setup wizard is open on the maintenance port and can " +
+				"replace this console's identity provider — restart without --superuser when done")
 		}
-		log.Info().Str("issuer", oidcConfig.Issuer).Str("redirect", oidcConfig.RedirectURL).
-			Str("groups_claim", oidcConfig.GroupsClaim).
-			Msg("editors sign in through the identity provider")
+
+		// Whether to offer the wizard is decided once, at startup: a route
+		// that came and went with the backend's availability would be a setup
+		// page that opened itself whenever the backend had a bad second.
+		c.setupDoor = decideSetupDoor(context.Background(), backend.AsConsole(staffConfig.Token), oidcConfig.Superuser)
+		if err := c.connectIdentityProvider(context.Background()); err != nil {
+			// Locked rather than stopped: the wizard is still served, and
+			// every page says what is wrong.
+			log.Error().Err(err).Msg("cannot connect to the identity provider: nobody can sign in")
+		}
+		c.registerSetup(svc.MaintenanceMux())
 	}
 
 	// Every page this service serves carries a Content-Security-Policy, and
@@ -290,6 +317,7 @@ func (c *console) registerRoutes(mux *http.ServeMux) error {
 	c.registerTopicRoutes(mux)
 	c.registerActionRoutes(mux)
 	c.registerThemeRoutes(mux)
+	c.registerPeopleRoutes(mux)
 
 	mux.Handle("GET /audit", c.localized(c.audit))
 
@@ -369,7 +397,7 @@ func (c *console) newPage(r *http.Request, titleKey string) page {
 		Development:  c.development,
 		SiteURL:      c.siteURL,
 		Editor:       identity.Name,
-		Admin:        slices.Contains(identity.Groups, c.adminGroup),
+		Admin:        slices.Contains(identity.Groups, c.currentAdminGroup()),
 	}
 	if c.development {
 		data.StandIn = standInNumber(r)
@@ -384,12 +412,27 @@ func (c *console) newPage(r *http.Request, titleKey string) page {
 	return data
 }
 
+// setAdminGroup and currentAdminGroup guard the administrators' group, which
+// provisioning sets while requests are being served.
+func (c *console) setAdminGroup(name string) {
+	c.adminMu.Lock()
+	c.adminGroup = name
+	c.adminMu.Unlock()
+}
+
+func (c *console) currentAdminGroup() string {
+	c.adminMu.RLock()
+	defer c.adminMu.RUnlock()
+	return c.adminGroup
+}
+
 // noticeKeys are the confirmations a redirect may ask a page to show.
 var noticeKeys = map[string]string{
 	"saved":   "notice.saved",
 	"created": "notice.created",
 	"deleted": "notice.deleted",
 	"logo":    "notice.logo",
+	"removed": "notice.removed",
 
 	// A proposal is not a save: the organisation stays as it was until
 	// enough other editors approve, and the notice has to say so.

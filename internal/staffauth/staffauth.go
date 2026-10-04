@@ -32,6 +32,13 @@ const (
 	IdentityHeader = "X-Staff-Identity"
 )
 
+// CallbackPath is where the identity provider sends an editor's browser back
+// to on the console. The backend writes it into the provider's redirect URI
+// when it provisions one, Authentik matches it strictly on every sign-in
+// afterwards, and the console serves it: one definition, or a sign-in that
+// breaks with an error only the person trying it sees.
+const CallbackPath = "/auth/callback"
+
 // Identity is who is acting through the console.
 //
 // It is what the identity provider said about them at sign-in and nothing
@@ -44,7 +51,14 @@ type Identity struct {
 	// Name is what to call them on a screen and in the log.
 	Name string `json:"name,omitempty"`
 
-	// Groups are the identity-provider groups they are in.
+	// Username is their account name in the identity provider, which is
+	// what the backend asks the directory about. Absent only for the stand-in
+	// identities of a development run.
+	Username string `json:"username,omitempty"`
+
+	// Groups are the identity-provider groups they are in, as the console
+	// last heard. Once a directory is provisioned the backend does not believe
+	// them: it asks the directory. They are what a development run decides by.
 	Groups []string `json:"groups,omitempty"`
 }
 

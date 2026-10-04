@@ -260,3 +260,25 @@ func TestPrefixerLabelsPartialLine(t *testing.T) {
 		t.Errorf("output = %q, want the fragment written", got)
 	}
 }
+
+func TestAuthArgs(t *testing.T) {
+	if got := authArgs(Service{Name: "frontend"}); len(got) != 0 {
+		t.Errorf("a service with nothing to be told got %v", got)
+	}
+	got := strings.Join(authArgs(Service{StaffToken: "t", SettingsKey: "k", Superuser: true}), " ")
+	if got != "--staff-token t --settings-key k --superuser" {
+		t.Errorf("authArgs = %q", got)
+	}
+}
+
+func TestARunKeepsItsSettingsKey(t *testing.T) {
+	dir := RunDir{Root: t.TempDir()}
+	first, err := SettingsKey(dir)
+	if err != nil || first == "" {
+		t.Fatalf("SettingsKey: %q, %v", first, err)
+	}
+	again, _ := SettingsKey(dir)
+	if again != first {
+		t.Error("a resumed run got a new settings key, and could no longer read what it sealed")
+	}
+}

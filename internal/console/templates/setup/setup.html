@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>schMERZ-Reformen — set up sign-in</title>
+<link rel="stylesheet" href="/setup/setup.css">
+</head>
+<body>
+
+{{ if .Done }}
+  <h1>That is set up.</h1>
+  <div class="notice good">
+    <p><strong>{{ .Result.AdminUsername }}</strong> administers this site now. They can sign
+       in at the console, create collectives and add their editors.</p>
+    {{ if and .Result.TokenOwner (ne .Result.TokenOwner .Result.AdminUsername) }}
+    <p class="hint">Provisioned with <code>{{ .Result.TokenOwner }}</code>'s token, which holds no
+       role here — it was the way in to your directory, not to this site.</p>
+    {{ end }}
+    <p>Editors now sign in through <code>{{ .Result.InstanceURL }}</code>, with the application
+       <code>{{ .Result.AppName }}</code>. Its administrators are the group
+       <code>{{ .AdminGroup }}</code>; each collective's editors are the group named on the
+       collective.</p>
+    {{ if .Result.OwnToken }}
+    <p><strong>The token you pasted is no longer needed and may expire.</strong> The backend
+       minted one of its own, <code>{{ .Result.OwnToken }}</code>, which does not expire — find
+       it in Authentik under <em>Directory → Tokens and App passwords</em>. Revoking it stops
+       every sign-in to the console, and nothing else.</p>
+    {{ end }}
+  </div>
+
+  {{ with .Result.Reconciled }}
+  <div class="notice warn">
+    <p><strong>Some of this already existed in your directory and was brought back in line:</strong></p>
+    <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+    <p class="hint">Everything else was found as it should be, or created.</p>
+  </div>
+  {{ end }}
+
+  {{ with .ConnectFailed }}
+  <div class="notice bad">
+    <p>Everything was provisioned and stored, but this console could not connect to it yet:
+       {{ . }}. Restart the console once Authentik answers.</p>
+  </div>
+  {{ end }}
+
+  {{ if .Result.AdminLink }}
+  <div class="notice good">
+    <h2>The first administrator's way in</h2>
+    <p>A single-use link to set up a passkey — the same way everybody added later is given
+       theirs. Pass it on yourself: nothing is emailed.</p>
+    <p><code class="link">{{ .Result.AdminLink }}</code></p>
+    <p><strong>Shown here once.</strong> Nothing keeps a copy; another can be minted from the
+       console's people page.</p>
+  </div>
+  {{ end }}
+
+  {{ if not .Result.RecoveryReady }}
+  <div class="notice warn">
+    <p><strong>Nobody else can be onboarded yet.</strong> This Authentik has no recovery flow
+       bound to its brand, and a recovery link is how somebody new is given a way in.</p>
+  </div>
+  {{ end }}
+  {{ with .Missing }}
+  <div class="notice warn">
+    <p>Still to do:</p>
+    <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+  </div>
+  {{ end }}
+
+  <div class="notice">
+    <p><strong>Close this door.</strong> Restart the console{{ if .Reprovision }} without
+       <code>--superuser</code>{{ end }}. The setup page is not registered on a console that is
+       already configured.</p>
+  </div>
+
+{{ else }}
+
+  <h1>Set up sign-in</h1>
+  <p class="lede">This console has no identity provider yet, so nobody can sign in to it.
+     Point it at your Authentik.</p>
+
+  {{ if .Reprovision }}
+  <div class="notice warn">
+    <p><strong>This console already has one.</strong> Finishing here replaces it: everybody who
+       signs in to the console today will answer to whichever directory you name below.</p>
+  </div>
+  {{ end }}
+
+  {{ with .Error }}
+  <div class="notice bad"><p>{{ . }}</p></div>
+  {{ end }}
+
+  {{ with .Missing }}
+  <div class="notice warn">
+    <p>That instance is missing:</p>
+    <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+    <p>Nothing was created. Flows are shared with every other application in your directory,
+       and a tool asked to add itself has no business rewriting how everybody else signs in.</p>
+  </div>
+  {{ end }}
+
+  <form method="post" action="/setup">
+    <label for="instance_url">Authentik instance</label>
+    <input type="url" id="instance_url" name="instance_url" required
+           placeholder="https://auth.example.org" value="{{ .InstanceURL }}">
+    <p class="hint">The address you open Authentik at. Pre-filled from
+       <code>SCHMERZ_OIDC_ISSUER</code> when it is set; an issuer URL, a trailing slash or an
+       <code>/api/v3</code> on the end are all fine.</p>
+
+    <label for="token">API token</label>
+    <input type="password" id="token" name="token" required autocomplete="off">
+    <p class="hint">
+      Make one in Authentik: <strong>Directory → Tokens and App passwords → Create</strong>,
+      intent <em>API Token</em>. There is no way around this step — a first run cannot sign in
+      by OIDC, because the application it would sign in against is what this creates.
+      <br><strong>It is only needed for setup, so let it expire.</strong> It is not kept: the
+      backend mints a non-expiring token of its own, named for this site.
+      <br><strong>This token can make users in your directory.</strong> It never reaches the
+      console's pages, and the backend spends it once.
+    </p>
+
+    <label for="app_name">Name in Authentik</label>
+    <input type="text" id="app_name" name="app_name" required
+           pattern="[a-z0-9]([a-z0-9_\-]*[a-z0-9])?" value="{{ .AppName }}">
+    <p class="hint">
+      The application's slug, and the prefix of the administrators' group:
+      <code>{{ .AppName }}-admins</code>. Give a second installation on the same Authentik a
+      different name, or it will find the first one's group, join it, and hand its
+      administrators somebody else's site.
+      <br>Lowercase letters and digits, with <code>-</code> or <code>_</code> inside.
+    </p>
+
+    <fieldset>
+      <legend>The first administrator</legend>
+      <p class="hint">
+        Who this site answers to. <strong>Leave these blank and it is whoever owns the
+        token</strong> — on a fresh Authentik that is <code>akadmin</code>, a bootstrap account
+        rather than a person. An existing account is adopted as it is; a new one is created.
+        Either way they get a single-use link to set up a passkey.
+      </p>
+      <label for="admin_username">Username</label>
+      <input type="text" id="admin_username" name="admin_username" autocomplete="off"
+             value="{{ .AdminUsername }}">
+      <label for="admin_name">Name</label>
+      <input type="text" id="admin_name" name="admin_name" value="{{ .AdminName }}">
+    </fieldset>
+
+    <label for="console_url">This console's public address</label>
+    <input type="url" id="console_url" name="console_url" required value="{{ .ConsoleURL }}">
+    <p class="hint">The sign-in redirect is registered as
+       <code>{{ .ConsoleURL }}{{ .CallbackPath }}</code> and matched exactly, so this has to be
+       the address editors really reach the console at.</p>
+
+    <button type="submit">
+      {{ if .Reprovision }}Replace the identity provider{{ else }}Set up{{ end }}
+    </button>
+    <p class="hint">This takes up to a minute against a remote Authentik. Keep the page open.</p>
+  </form>
+
+  <div class="notice">
+    <p>What this creates in your directory: an OAuth2 provider, an application, the group
+       <code>{{ .AppName }}-admins</code>, a token for the backend, and — only if your Authentik
+       has none — a recovery flow, bound to the default brand only if the brand has none either.
+       A group for each collective is created when the collective names one.</p>
+    <p>Anything of these that already exists is reused and brought in line rather than
+       duplicated, and the result page lists every correction. An existing account named as
+       the first administrator is adopted as it is.</p>
+  </div>
+
+{{ end }}
+
+</body>
+</html>

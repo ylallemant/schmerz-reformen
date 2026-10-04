@@ -32,6 +32,10 @@ type StaffProfile struct {
 	Name    string `json:"name,omitempty"`
 	Admin   bool   `json:"admin"`
 
+	// Groups are the groups the backend decided by — the directory's, once
+	// one is provisioned. The console keeps them to draw its menus.
+	Groups []string `json:"groups"`
+
 	Collectives []Collective `json:"collectives"`
 
 	// Waiting is how many changes to organisations wait for this editor's

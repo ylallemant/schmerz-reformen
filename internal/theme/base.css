@@ -1619,6 +1619,25 @@ body > footer {
   border-bottom: 1px solid var(--border);
 }
 
+/* A checkbox with its label beside it, one to a line. */
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+  margin: 0.25rem 0;
+}
+
+label.check input {
+  width: auto;
+}
+
+/* A one-time link that has to be copied whole: it breaks anywhere rather
+   than running off the page. */
+.wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
 /* A small logo beside a name, in a table row. */
 .profile-inline {
   display: inline-flex;

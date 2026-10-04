@@ -182,7 +182,7 @@ type SeedSummary struct {
 //
 // A collective whose address is already taken is left alone, with everything
 // under it. Resuming a run with --seeding costs a listing and nothing else.
-func Seed(ctx context.Context, backendURL, origin, zoneName string, out io.Writer) (SeedSummary, error) {
+func Seed(ctx context.Context, backendURL, origin, staffToken, zoneName string, out io.Writer) (SeedSummary, error) {
 	var file seedFile
 	if err := json.Unmarshal(fixtures, &file); err != nil {
 		return SeedSummary{}, fmt.Errorf("read the fixtures: %w", err)
@@ -205,8 +205,9 @@ func Seed(ctx context.Context, backendURL, origin, zoneName string, out io.Write
 
 	seeder := &seeder{
 		base: strings.TrimRight(backendURL, "/"), origin: origin, out: out, zone: zone,
-		identity: identity,
-		http:     &http.Client{Timeout: 30 * time.Second},
+		identity:   identity,
+		staffToken: staffToken,
+		http:       &http.Client{Timeout: 30 * time.Second},
 	}
 
 	existing, err := seeder.existing(ctx)
@@ -269,6 +270,9 @@ type seeder struct {
 
 	// identity is the editor every content call is made as.
 	identity string
+
+	// staffToken is the console's secret, when the backend expects one.
+	staffToken string
 
 	// origin is what the software authenticator claims the page's origin was.
 	// It has to be the frontend's real public address, because the backend
@@ -591,6 +595,9 @@ func (s *seeder) reader(ctx context.Context, collectiveID, actionID string) erro
 func (s *seeder) staff(ctx context.Context, method, path string, body, out any) error {
 	return s.call(ctx, method, path, body, out, func(req *http.Request) {
 		req.Header.Set(staffauth.IdentityHeader, s.identity)
+		if s.staffToken != "" {
+			req.Header.Set(staffauth.TokenHeader, s.staffToken)
+		}
 	})
 }
 
@@ -606,6 +613,9 @@ func (s *seeder) staffAs(ctx context.Context, subject, method, path string, body
 	}
 	return s.call(ctx, method, path, body, out, func(req *http.Request) {
 		req.Header.Set(staffauth.IdentityHeader, identity)
+		if s.staffToken != "" {
+			req.Header.Set(staffauth.TokenHeader, s.staffToken)
+		}
 	})
 }
 

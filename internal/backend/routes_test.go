@@ -73,6 +73,16 @@ func everyOperation(t *testing.T) []route {
 // under /v1/staff/ declares itself, and nothing else does.
 func TestEveryConsoleRouteIsDeclaredAsOne(t *testing.T) {
 	for _, route := range everyOperation(t) {
+		// The console's own routes, made before anybody is signed in, live
+		// under /v1/console/ and declare themselves the same way.
+		if consoleRoute, _ := route.op.Metadata[requiresConsole].(bool); consoleRoute ||
+			strings.HasPrefix(route.path, "/v1/console/") {
+			if !consoleRoute || !strings.HasPrefix(route.path, "/v1/console/") {
+				t.Errorf("%s %s: /v1/console/ and consoleOnly go together", route.op.Method, route.path)
+			}
+			continue
+		}
+
 		declared, _ := route.op.Metadata[requiresStaff].(bool)
 		under := strings.HasPrefix(route.path, "/v1/staff/")
 
@@ -122,7 +132,8 @@ func TestNoWriteIsOpenToTheWorld(t *testing.T) {
 		}
 		session, _ := route.op.Metadata[requiresSession].(bool)
 		console, _ := route.op.Metadata[requiresStaff].(bool)
-		if session || console || unauthenticatedByDesign[route.op.OperationID] {
+		consoleItself, _ := route.op.Metadata[requiresConsole].(bool)
+		if session || console || consoleItself || unauthenticatedByDesign[route.op.OperationID] {
 			continue
 		}
 		t.Errorf("%s %s (%s) changes something and requires nobody",

@@ -92,6 +92,27 @@ func (c *Client) AsStaff(token string, identity staffauth.Identity) (*Client, er
 	return &copied, nil
 }
 
+// AsConsole returns a client that speaks as the console itself, for nobody:
+// the routes made before anybody can be signed in — reading how editors sign
+// in, and running the setup wizard.
+func (c *Client) AsConsole(token string) *Client {
+	copied := *c
+	copied.session = ""
+	copied.staffToken = token
+	copied.staffIdentity = ""
+	return &copied
+}
+
+// WithTimeout returns a copy whose calls may take longer than the default.
+//
+// For the one call that is slow on purpose: provisioning makes twenty-odd
+// round trips to somebody else's Authentik, forty seconds measured.
+func (c *Client) WithTimeout(timeout time.Duration) *Client {
+	copied := *c
+	copied.http = &http.Client{Timeout: timeout, Transport: c.http.Transport}
+	return &copied
+}
+
 // authorize attaches whichever credential this copy speaks with.
 //
 // Headers rather than a cookie, because the backend is never reached by a
@@ -103,9 +124,9 @@ func (c *Client) authorize(req *http.Request) {
 	}
 	if c.staffIdentity != "" {
 		req.Header.Set(staffauth.IdentityHeader, c.staffIdentity)
-		if c.staffToken != "" {
-			req.Header.Set(staffauth.TokenHeader, c.staffToken)
-		}
+	}
+	if c.staffToken != "" {
+		req.Header.Set(staffauth.TokenHeader, c.staffToken)
 	}
 }
 
