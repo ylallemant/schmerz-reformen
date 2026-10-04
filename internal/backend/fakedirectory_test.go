@@ -58,6 +58,7 @@ type fakeUser struct {
 	PK       int
 	Username string
 	Name     string
+	Email    string
 	Active   bool
 	Groups   []string // pks
 }
@@ -204,6 +205,19 @@ func (f *fakeDirectory) called(prefix string) int {
 	return count
 }
 
+// userNamed finds an account by username.
+func (f *fakeDirectory) userNamed(username string) *fakeUser {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, user := range f.users {
+		if user.Username == username {
+			return user
+		}
+	}
+	f.t.Fatalf("no user %q", username)
+	return nil
+}
+
 func (f *fakeDirectory) body(key string) map[string]any {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -225,7 +239,7 @@ func (f *fakeDirectory) userJSON(user *fakeUser) map[string]any {
 		objs = append(objs, map[string]any{"pk": pk, "name": f.groups[pk].Name})
 	}
 	return map[string]any{
-		"pk": user.PK, "username": user.Username, "name": user.Name, "is_active": user.Active,
+		"pk": user.PK, "username": user.Username, "name": user.Name, "email": user.Email, "is_active": user.Active,
 		"groups": groups, "groups_obj": objs,
 	}
 }
@@ -292,8 +306,28 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		answer(200, f.userJSON(user))
 
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/core/users/"):
+		pk, _ := strconv.Atoi(strings.Trim(strings.TrimPrefix(path, "/core/users/"), "/"))
+		user, ok := f.users[pk]
+		if !ok {
+			answer(404, map[string]any{"detail": "Not found."})
+			return
+		}
+		for key := range body {
+			if key != "email" {
+				f.t.Errorf("a user's %q was changed; only the email may be", key)
+			}
+		}
+		if email, ok := body["email"].(string); ok {
+			user.Email = email
+		}
+		answer(200, f.userJSON(user))
+
 	case r.Method == http.MethodPost && path == "/core/users/":
 		user := &fakeUser{PK: f.id(), Username: body["username"].(string), Name: body["name"].(string), Active: true}
+		if email, ok := body["email"].(string); ok {
+			user.Email = email
+		}
 		if groups, ok := body["groups"].([]any); ok {
 			for _, pk := range groups {
 				user.Groups = append(user.Groups, pk.(string))

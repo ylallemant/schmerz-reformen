@@ -35,6 +35,7 @@ type peoplePage struct {
 type personDraft struct {
 	Username string
 	Name     string
+	Email    string
 	Admin    bool
 }
 
@@ -91,9 +92,10 @@ func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
 	case "invite":
 		admin := r.FormValue("admin") != ""
 		name := strings.TrimSpace(r.FormValue("name"))
-		link, err := client.InvitePerson(r.Context(), username, name, admin)
+		email := strings.TrimSpace(r.FormValue("email"))
+		link, err := client.InvitePerson(r.Context(), username, name, email, admin)
 		if err != nil {
-			refused(err, &personDraft{Username: username, Name: name, Admin: admin})
+			refused(err, &personDraft{Username: username, Name: name, Email: email, Admin: admin})
 			return
 		}
 		c.renderPeople(w, r, http.StatusOK, func(data *peoplePage) { data.WayIn = &link })
@@ -110,6 +112,15 @@ func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
 		if err := client.SetPersonAdmin(r.Context(), pk, username, r.FormValue("admin") != ""); err != nil {
 			refused(err, nil)
 			return
+		}
+		// Only when it changed: the row always posts the address it shows,
+		// and an unchanged one is not a change to make in somebody's
+		// account.
+		if email := strings.TrimSpace(r.FormValue("email")); email != strings.TrimSpace(r.FormValue("email_was")) {
+			if err := client.SetPersonEmail(r.Context(), pk, username, email); err != nil {
+				refused(err, nil)
+				return
+			}
 		}
 		redirect(w, r, "/settings/people", "saved")
 

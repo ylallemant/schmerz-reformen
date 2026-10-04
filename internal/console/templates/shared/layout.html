@@ -238,7 +238,8 @@
 <ul class="plain-list">
   {{ range .People }}
   <li class="person-row">
-    <span><strong>{{ .Name }}</strong> <span class="hint mono">{{ .Username }}</span></span>
+    <span><strong>{{ .Name }}</strong> <span class="hint mono">{{ .Username }}</span>
+      {{ if .Email }}<br><a class="link wrap-anywhere" href="mailto:{{ .Email }}">{{ .Email }}</a>{{ end }}</span>
     {{ if $may }}
     <form method="post" action="{{ $action }}" data-confirm="{{ $page.T "people.take_confirm" }}">
       <input type="hidden" name="role" value="{{ $role }}">

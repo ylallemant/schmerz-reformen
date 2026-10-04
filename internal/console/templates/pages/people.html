@@ -46,6 +46,7 @@
         <td>
           <strong>{{ .Name }}</strong><br>
           <span class="hint mono">{{ .Username }}</span>
+          {{ if .Email }}<br><a class="link wrap-anywhere" href="mailto:{{ .Email }}">{{ .Email }}</a>{{ end }}
           {{ if .Self }}<br><span class="hint">{{ $page.T "people.you" }}</span>{{ end }}
           {{/* The forms are empty and out of the way: a <form> cannot span
                table cells, so the controls in the other columns name theirs
@@ -55,6 +56,10 @@
         <td>
           <label class="check"><input type="checkbox" form="roles-{{ .PK }}" name="admin" value="1"{{ if .Admin }} checked{{ end }}>
             {{ $page.T "people.admin" }}</label>
+          <label for="email-{{ .PK }}" class="visually-hidden">{{ $page.T "people.email" }}</label>
+          <input type="email" id="email-{{ .PK }}" form="roles-{{ .PK }}" name="email" maxlength="200"
+                 autocomplete="off" placeholder="{{ $page.T "people.email" }}" value="{{ .Email }}">
+          <input type="hidden" form="roles-{{ .PK }}" name="email_was" value="{{ .Email }}">
         </td>
         <td>
           {{/* Read here, given on the collective's or the organisation's own
@@ -116,6 +121,10 @@
       <input type="text" id="person-username" name="username" maxlength="150" required autocomplete="off" value="{{ .Draft.Username }}">
     </div>
   </div>
+  <label for="person-email">{{ .T "people.email" }}
+    <span class="hint">{{ .T "people.email_hint" }}</span>
+  </label>
+  <input type="email" id="person-email" name="email" maxlength="200" autocomplete="off" value="{{ .Draft.Email }}">
   <label class="check"><input type="checkbox" name="admin" value="1"{{ if .Draft.Admin }} checked{{ end }}>
     {{ .T "people.admin_role" }}</label>
   <p class="hint">{{ .Tf "people.users_hint" "Group" .People.UsersGroup }}</p>

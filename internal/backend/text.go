@@ -97,16 +97,32 @@ func cleanContact(value string) (string, error) {
 		return cleanURL("the contact", value)
 	}
 
-	// Deliberately shallow. Whether an address works is something only
-	// sending to it can say; this refuses what is plainly not one, and
-	// anything that could break out of the mailto: it will be rendered in.
-	at := strings.LastIndex(value, "@")
-	if at < 1 || at == len(value)-1 || strings.ContainsAny(value, " \t\r\n<>\"'?&") ||
-		utf8.RuneCountInString(value) > 200 {
+	if !looksLikeEmail(value) {
 		return "", huma.Error422UnprocessableEntity(
 			"the contact must be an email address or a web address")
 	}
 	return value, nil
+}
+
+// cleanEmail accepts an email address, or nothing.
+func cleanEmail(field, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if !looksLikeEmail(value) {
+		return "", huma.Error422UnprocessableEntity(field + " must be an email address")
+	}
+	return value, nil
+}
+
+// looksLikeEmail is deliberately shallow. Whether an address works is
+// something only sending to it can say; this refuses what is plainly not one,
+// and anything that could break out of the mailto: it will be rendered in.
+func looksLikeEmail(value string) bool {
+	at := strings.LastIndex(value, "@")
+	return at >= 1 && at < len(value)-1 && !strings.ContainsAny(value, " \t\r\n<>\"'?&") &&
+		utf8.RuneCountInString(value) <= 200
 }
 
 // parseBounds reads "north,south,east,west".

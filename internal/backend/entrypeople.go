@@ -124,7 +124,7 @@ func (a *API) groupPeople(ctx context.Context, client *authentik.Client, group s
 		return nil, directoryRefusal(err, "cannot read who is in "+group)
 	}
 	for _, person := range members {
-		people = append(people, UserItem{PK: person.PK, Username: person.Username, Name: person.Name})
+		people = append(people, UserItem{PK: person.PK, Username: person.Username, Name: person.Name, Email: person.Email})
 	}
 	sortUsers(people)
 	return people, nil

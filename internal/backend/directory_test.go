@@ -702,3 +702,98 @@ func TestAnInstanceThatLacksAPermissionKeepsTheOperatorsToken(t *testing.T) {
 		t.Errorf("stored token %q, want the one minted for the operator", stored.APIToken)
 	}
 }
+
+// TestAnEmailIsAWayToBeReached: the movement's organisers reach the people
+// they work with by it. It is optional, kept on the account in the directory,
+// shown where people are listed — and an account adopted keeps the address it
+// had.
+func TestAnEmailIsAWayToBeReached(t *testing.T) {
+	a := newAPI(t)
+	f := newFakeDirectory(t)
+	provisioned(t, a, f)
+	koeln := founded(t, a, "Bündnis Köln", "koeln")
+
+	invite := &InviteInput{}
+	invite.Body.Username, invite.Body.Name, invite.Body.Email = "kai", "Kai", " kai@example.org "
+	if _, err := a.staffInvitePerson(admin(), invite); err != nil {
+		t.Fatalf("staffInvitePerson: %v", err)
+	}
+	if created := f.body("POST /core/users/"); created["email"] != "kai@example.org" {
+		t.Errorf("created with email %v", created["email"])
+	}
+
+	invite.Body.Username, invite.Body.Email = "noaddress", "nicht-erreichbar"
+	if _, err := a.staffInvitePerson(admin(), invite); statusOf(err) != http.StatusUnprocessableEntity {
+		t.Errorf("an address that is not one: status %d, want 422", statusOf(err))
+	}
+	invite.Body.Email = ""
+	if _, err := a.staffInvitePerson(admin(), invite); err != nil {
+		t.Errorf("nobody has to give an address: %v", err)
+	}
+
+	// Adopted: an address it lacks is added, one it has is kept.
+	bare := f.addUser("bare")
+	kept := f.addUser("kept")
+	f.mu.Lock()
+	kept.Email = "own@example.org"
+	f.mu.Unlock()
+	for _, username := range []string{"bare", "kept"} {
+		invite.Body.Username, invite.Body.Email = username, "given@example.org"
+		if _, err := a.staffInvitePerson(admin(), invite); err != nil {
+			t.Fatalf("adopting %s: %v", username, err)
+		}
+	}
+	f.mu.Lock()
+	if bare.Email != "given@example.org" || kept.Email != "own@example.org" {
+		t.Errorf("adopted: bare %q, kept %q — an address is added, never replaced", bare.Email, kept.Email)
+	}
+	f.mu.Unlock()
+
+	// Changed, and cleared, by the site's administrators — for the console's
+	// people only.
+	kai := f.userNamed("kai")
+	set := &SetEmailInput{PK: kai.PK}
+	set.Body.Username, set.Body.Email = "kai", "kai@neu.example"
+	if _, err := a.staffSetPersonEmail(admin(), set); err != nil {
+		t.Fatalf("staffSetPersonEmail: %v", err)
+	}
+	if _, err := a.staffSetPersonEmail(editor("Lea", adminsOf("koeln")), set); statusOf(err) != http.StatusForbidden {
+		t.Errorf("a collective's administrator changing an address: status %d, want 403", statusOf(err))
+	}
+	outsider := f.addUser("outsider")
+	if _, err := a.staffSetPersonEmail(admin(), &SetEmailInput{PK: outsider.PK}); statusOf(err) != http.StatusNotFound {
+		t.Errorf("somebody with no role here: status %d, want 404", statusOf(err))
+	}
+
+	people, err := a.staffListPeople(admin(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, person := range people.Body.People {
+		found = found || (person.Username == "kai" && person.Email == "kai@neu.example")
+	}
+	if !found {
+		t.Errorf("the people page does not carry kai's address: %+v", people.Body.People)
+	}
+
+	// Whoever runs a collective sees how to reach its people.
+	grant := &EntryRoleInput{ID: koeln.ID, Role: "authors", PK: kai.PK, Username: "kai"}
+	if _, err := a.staffCollectiveGrant(admin(), grant); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := a.staffCollectivePeople(editor("Lea", adminsOf("koeln")), &CollectiveIDInput{ID: koeln.ID})
+	if err != nil || len(entry.Body.Others) != 1 || entry.Body.Others[0].Email != "kai@neu.example" {
+		t.Errorf("the collective's authors = %+v, %v", entry, err)
+	}
+
+	set.Body.Email = ""
+	if _, err := a.staffSetPersonEmail(admin(), set); err != nil {
+		t.Errorf("clearing an address: %v", err)
+	}
+	f.mu.Lock()
+	if kai.Email != "" {
+		t.Errorf("cleared address is %q", kai.Email)
+	}
+	f.mu.Unlock()
+}

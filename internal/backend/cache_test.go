@@ -74,6 +74,7 @@ var changesNothingCached = map[string]string{
 	"console-provision-auth":    "the console's own sign-in configuration",
 	"staff-invite-person":       "the directory, not the site's content",
 	"staff-set-person-admin":    "the directory, not the site's content",
+	"staff-set-person-email":    "the directory, not the site's content",
 	"staff-collective-grant":    "the directory, not the site's content",
 	"staff-collective-revoke":   "the directory, not the site's content",
 	"staff-organisation-grant":  "the directory, not the site's content",

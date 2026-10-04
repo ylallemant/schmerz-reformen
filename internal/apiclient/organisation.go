@@ -99,6 +99,7 @@ type User struct {
 	PK       int    `json:"pk"`
 	Username string `json:"username"`
 	Name     string `json:"name,omitempty"`
+	Email    string `json:"email,omitempty"`
 }
 
 // Users lists the console's users, for whoever gives roles.

@@ -638,9 +638,10 @@ type UserSpec struct {
 	// Name is what a colleague recognises them by.
 	Name string
 
-	// Email is stored on the directory record as an identifier. **Nothing in
-	// this project sends to it.** There is no mail server here and that was a
-	// deliberate removal; an admin hands over the way in themselves.
+	// Email is a way for the movement to reach the person, kept on their
+	// directory record and shown to whoever organises with them. **Nothing in
+	// this project sends to it, and nothing signs in with it**: there is no
+	// mail server here, and an admin hands over the way in themselves.
 	Email string
 
 	// Groups are the role groups to put them in at once, by identifier.
@@ -832,6 +833,18 @@ func (c *Client) UserByUsername(ctx context.Context, username string) (User, err
 		}
 	}
 	return User{}, fmt.Errorf("%w: user %q", ErrNotFound, username)
+}
+
+// SetEmail changes the address on somebody's account; empty clears it.
+//
+// Only the address. Their name, their credentials and their groups are not
+// this call's to touch.
+func (c *Client) SetEmail(ctx context.Context, pk int, email string) error {
+	path := fmt.Sprintf("/core/users/%d/", pk)
+	if err := c.do(ctx, http.MethodPatch, path, map[string]any{"email": email}, nil); err != nil {
+		return fmt.Errorf("set the email of user %d: %w", pk, err)
+	}
+	return nil
 }
 
 // UserByPK finds one person by their key — what a picker in the console

@@ -100,6 +100,7 @@ type Person struct {
 	PK       int       `json:"pk"`
 	Username string    `json:"username"`
 	Name     string    `json:"name,omitempty"`
+	Email    string    `json:"email,omitempty"`
 	Admin    bool      `json:"admin"`
 	Roles    []RoleRef `json:"roles"`
 	Self     bool      `json:"self"`
@@ -132,10 +133,10 @@ type WayIn struct {
 
 // InvitePerson adds somebody to the console — a user, and an administrator
 // when asked — and returns their way in.
-func (c *Client) InvitePerson(ctx context.Context, username, name string, admin bool) (WayIn, error) {
+func (c *Client) InvitePerson(ctx context.Context, username, name, email string, admin bool) (WayIn, error) {
 	var link WayIn
 	err := c.write(ctx, http.MethodPost, "/v1/staff/people", map[string]any{
-		"username": username, "name": name, "admin": admin,
+		"username": username, "name": name, "email": email, "admin": admin,
 	}, &link)
 	return link, err
 }
@@ -144,6 +145,14 @@ func (c *Client) InvitePerson(ctx context.Context, username, name string, admin 
 func (c *Client) SetPersonAdmin(ctx context.Context, pk int, username string, admin bool) error {
 	return c.write(ctx, http.MethodPut, "/v1/staff/people/"+strconv.Itoa(pk), map[string]any{
 		"username": username, "admin": admin,
+	}, nil)
+}
+
+// SetPersonEmail changes the address somebody can be reached at; empty
+// clears it.
+func (c *Client) SetPersonEmail(ctx context.Context, pk int, username, email string) error {
+	return c.write(ctx, http.MethodPut, "/v1/staff/people/"+strconv.Itoa(pk)+"/email", map[string]any{
+		"username": username, "email": email,
 	}, nil)
 }
 

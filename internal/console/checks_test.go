@@ -33,7 +33,7 @@ func TestEveryKeyTheConsoleAsksForIsDefined(t *testing.T) {
 		"level":       levels,
 		"action_kind": actionKinds,
 		"member_kind": memberKinds,
-		"role":        {"collective_admins", "collective_authors", "organisation_admins", "organisation_members"},
+		"role":        {"collective_admin", "collective_author", "organisation_admin", "organisation_member"},
 	} {
 		for _, value := range values {
 			enumerated = append(enumerated, prefix+"."+value)

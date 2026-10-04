@@ -67,8 +67,13 @@ the backend — with a role holding only the permissions it needs and a token of
 its own; the pasted token is spent once and may expire. From then on **what an editor may
 do is read from Authentik by the backend** on every request, never from the
 sign-in token, and people are handed a single-use link to set up a passkey —
-no password, no email. The directory token stays in the backend; the console
-holds nothing but the OAuth client secret.
+no password, and nothing emailed. A console user's **email address is
+information**: optional, kept on their Authentik account, and shown to the
+site's administrators and to whoever runs a collective or an organisation with
+them, so the movement's organisers can reach them. Nothing is sent to it and
+nobody signs in with it. Readers' accounts still hold no address at all. The
+directory token stays in the backend; the console holds nothing but the OAuth
+client secret.
 
 Content is published without review. The other half of that bargain is the
 **audit log**: every change made through the console is recorded against the

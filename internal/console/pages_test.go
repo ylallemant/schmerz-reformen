@@ -103,8 +103,8 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	}
 
 	people := apiclient.EntryPeople{
-		Admins: []apiclient.User{{PK: 7, Username: hostile, Name: hostile}},
-		Others: []apiclient.User{{PK: 8, Username: "kai", Name: hostile}},
+		Admins: []apiclient.User{{PK: 7, Username: hostile, Name: hostile, Email: hostile}},
+		Others: []apiclient.User{{PK: 8, Username: "kai", Name: hostile, Email: "kai@example.org"}},
 	}
 	users := []apiclient.User{{PK: 7, Username: hostile, Name: hostile}, {PK: 9, Username: "sam", Name: hostile}}
 
@@ -181,13 +181,13 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		answer(w, apiclient.People{
 			AdminGroup: "schmerz-admins", UsersGroup: "schmerz-users", RecoveryReady: false,
 			People: []apiclient.Person{
-				{PK: 7, Username: hostile, Name: hostile, Admin: true, Self: true, Roles: []apiclient.RoleRef{
-					{Kind: "collective", ID: "c1", Name: hostile, Role: "admins"},
-					{Kind: "collective", ID: "c1", Name: hostile, Role: "authors"},
-					{Kind: "organisation", ID: "o1", Name: hostile, Role: "admins"},
-					{Kind: "organisation", ID: "o1", Name: hostile, Role: "members"},
+				{PK: 7, Username: hostile, Name: hostile, Email: hostile, Admin: true, Self: true, Roles: []apiclient.RoleRef{
+					{Kind: "collective", ID: "c1", Name: hostile, Role: "admin"},
+					{Kind: "collective", ID: "c1", Name: hostile, Role: "author"},
+					{Kind: "organisation", ID: "o1", Name: hostile, Role: "admin"},
+					{Kind: "organisation", ID: "o1", Name: hostile, Role: "member"},
 				}},
-				{PK: 8, Username: "kai", Name: hostile},
+				{PK: 8, Username: "kai", Name: hostile, Email: "kai@example.org"},
 			},
 		})
 	})
@@ -233,6 +233,7 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	})
 	mux.HandleFunc("POST /v1/staff/people/{pk}/link", write(apiclient.WayIn{Username: "kai", Link: "https://auth.example/if/flow/recovery/?token=again"}))
 	mux.HandleFunc("PUT /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
+	mux.HandleFunc("PUT /v1/staff/people/{pk}/email", write(map[string]bool{"done": true}))
 	mux.HandleFunc("DELETE /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("POST /v1/staff/organisations", write(organisation))
 	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(organisation))

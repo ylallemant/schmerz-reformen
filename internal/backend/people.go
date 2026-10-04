@@ -38,11 +38,17 @@ import (
 // of what it does to the directory: removing somebody takes them out of this
 // site's groups and leaves their account exactly as it was.
 //
-// # No password, no email
+// # No password, and an email only to be reached at
 //
 // A new person is handed a single-use recovery link an administrator passes
 // on themselves, ending with their own passkey. An existing account is adopted
 // as it is, and needs nothing handed over.
+//
+// Their email address is information: how the movement's organisers reach
+// them outside the console. It is kept on their account in the directory,
+// shown to the site's administrators and to whoever runs a collective or an
+// organisation with them, and **nothing here sends to it or signs in with
+// it**. It is optional throughout.
 func (a *API) registerPeopleRoutes(api huma.API) {
 	huma.Register(api, adminOnly(huma.Operation{
 		OperationID: "staff-list-people",
@@ -71,6 +77,16 @@ func (a *API) registerPeopleRoutes(api huma.API) {
 		Description: "Refused when it would leave nobody able to administer.",
 		Tags:        []string{"People"},
 	}), a.staffSetPersonAdmin)
+
+	huma.Register(api, adminOnly(huma.Operation{
+		OperationID: "staff-set-person-email",
+		Method:      http.MethodPut,
+		Path:        "/v1/staff/people/{pk}/email",
+		Summary:     "Change the address somebody can be reached at",
+		Description: "Information for the movement's organisers: nothing is sent to it and " +
+			"nobody signs in with it. Empty clears it.",
+		Tags: []string{"People"},
+	}), a.staffSetPersonEmail)
 
 	huma.Register(api, adminOnly(huma.Operation{
 		OperationID: "staff-relink-person",
@@ -117,6 +133,7 @@ type PersonItem struct {
 	PK       int       `json:"pk"`
 	Username string    `json:"username"`
 	Name     string    `json:"name,omitempty"`
+	Email    string    `json:"email,omitempty"`
 	Admin    bool      `json:"admin"`
 	Roles    []RoleRef `json:"roles"`
 
@@ -237,8 +254,9 @@ func (a *API) staffListPeople(ctx context.Context, _ *struct{}) (*PeopleOutput, 
 			row, seen := byPK[person.PK]
 			if !seen {
 				row = &PersonItem{
-					PK: person.PK, Username: person.Username, Name: person.Name, Roles: []RoleRef{},
-					Self: who.Username != "" && who.Username == person.Username,
+					PK: person.PK, Username: person.Username, Name: person.Name, Email: person.Email,
+					Roles: []RoleRef{},
+					Self:  who.Username != "" && who.Username == person.Username,
 				}
 				byPK[person.PK] = row
 			}
@@ -286,6 +304,7 @@ type InviteInput struct {
 	Body struct {
 		Username string `json:"username"`
 		Name     string `json:"name"`
+		Email    string `json:"email,omitempty" doc:"where the movement can reach them; optional, and never sent to"`
 		Admin    bool   `json:"admin"`
 	}
 }
@@ -320,6 +339,10 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 	if username == "" || name == "" {
 		return nil, huma.Error422UnprocessableEntity("a username and a name are both needed")
 	}
+	email, err := cleanEmail("the email", in.Body.Email)
+	if err != nil {
+		return nil, err
+	}
 
 	// Nothing is created until the directory can hand the account over. An
 	// account that exists already needs nothing handed over.
@@ -345,7 +368,7 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 		pks = append(pks, found.PK)
 	}
 
-	member, err := client.EnsureMember(ctx, authentik.UserSpec{Username: username, Name: name, Groups: pks}, groupPKs)
+	member, err := client.EnsureMember(ctx, authentik.UserSpec{Username: username, Name: name, Email: email, Groups: pks}, groupPKs)
 	if errors.Is(err, authentik.ErrInactive) {
 		return nil, huma.Error409Conflict(username + " exists in the identity provider and is deactivated: " +
 			"reactivate the account there first — this site does not overrule that")
@@ -357,6 +380,14 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 
 	out := &LinkOutput{}
 	out.Body.Username = username
+	if member.Adopted && email != "" && member.Email == "" {
+		// An adopted account keeps everything it has. An address it does
+		// not have takes nothing from it, and is what the administrator
+		// came to say.
+		if err := client.SetEmail(ctx, member.PK, email); err != nil {
+			return nil, directoryRefusal(err, username+" was given access, and the email could not be stored")
+		}
+	}
 	if member.Adopted {
 		// They can already sign in, with credentials that are theirs. A
 		// recovery link would let whoever holds it replace those, so none is
@@ -479,6 +510,59 @@ func (a *API) notTheLastAdmin(ctx context.Context, client *authentik.Client, adm
 	return nil
 }
 
+// SetEmailInput changes the address somebody can be reached at.
+type SetEmailInput struct {
+	PK   int `path:"pk"`
+	Body struct {
+		Username string `json:"username"`
+		Email    string `json:"email"`
+	}
+}
+
+func (a *API) staffSetPersonEmail(ctx context.Context, in *SetEmailInput) (*DoneRolesOutput, error) {
+	who, err := mustAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	email, err := cleanEmail("the email", in.Body.Email)
+	if err != nil {
+		return nil, err
+	}
+	client, err := a.peopleClient()
+	if err != nil {
+		return nil, err
+	}
+	// Only somebody with a role here: the directory is shared with other
+	// applications, and this site has no business editing their people.
+	if err := a.holdsARole(ctx, client, in.PK); err != nil {
+		return nil, err
+	}
+	if err := client.SetEmail(ctx, in.PK, email); err != nil {
+		return nil, directoryRefusal(err, "cannot store the email")
+	}
+
+	log.Info().Str("by", who.Username).Str("username", in.Body.Username).Int("person", in.PK).
+		Bool("cleared", email == "").Msg("the address somebody can be reached at was changed")
+	return doneRoles(), nil
+}
+
+// holdsARole refuses anybody this site has not given a role: its users and
+// administrators are the people it may change anything about.
+func (a *API) holdsARole(ctx context.Context, client *authentik.Client, pk int) error {
+	for _, group := range []string{a.usersGroup(), a.currentAdminGroup()} {
+		members, err := client.UsersInGroup(ctx, group)
+		if err != nil {
+			return directoryRefusal(err, "cannot read who is in "+group)
+		}
+		for _, person := range members {
+			if person.PK == pk {
+				return nil
+			}
+		}
+	}
+	return huma.Error404NotFound("nobody with that key uses this console")
+}
+
 // RelinkInput mints a fresh way in.
 type RelinkInput struct {
 	PK   int `path:"pk"`
@@ -555,6 +639,7 @@ type UserItem struct {
 	PK       int    `json:"pk"`
 	Username string `json:"username"`
 	Name     string `json:"name,omitempty"`
+	Email    string `json:"email,omitempty"`
 }
 
 // UsersOutput is the console's users.
@@ -622,7 +707,9 @@ func (a *API) staffListUsers(ctx context.Context, _ *struct{}) (*UsersOutput, er
 				continue
 			}
 			seen[person.PK] = true
-			out.Body.Users = append(out.Body.Users, UserItem{PK: person.PK, Username: person.Username, Name: person.Name})
+			out.Body.Users = append(out.Body.Users, UserItem{
+				PK: person.PK, Username: person.Username, Name: person.Name, Email: person.Email,
+			})
 		}
 	}
 	sortUsers(out.Body.Users)

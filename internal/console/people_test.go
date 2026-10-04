@@ -74,11 +74,12 @@ func TestARefusedInviteKeepsWhatWasTyped(t *testing.T) {
 	backend, _ := fakeBackend(t, true)
 	response, rendered := post(t, served(t, backend.URL), "/settings/people", url.Values{
 		"action": {"invite"}, "username": {"jemand-neues"}, "name": {"Jemand Neues"}, "admin": {"1"},
+		"email": {"jemand@example.org"},
 	})
 	if response.StatusCode != http.StatusUnprocessableEntity {
 		t.Fatalf("status = %d", response.StatusCode)
 	}
-	for _, want := range []string{`value="jemand-neues"`, `value="Jemand Neues"`} {
+	for _, want := range []string{`value="jemand-neues"`, `value="Jemand Neues"`, `value="jemand@example.org"`} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("the refused form lost %s", want)
 		}
@@ -100,5 +101,41 @@ func TestAnAdoptedAccountIsSaidSoAndGivenNoLink(t *testing.T) {
 	}
 	if strings.Contains(rendered, "/if/flow/recovery/") {
 		t.Error("a way in was shown for an account that can already sign in")
+	}
+}
+
+// TestAnEmailIsSentOnlyWhenItChanged: every row posts the address it shows,
+// and an unchanged one is not a change to make in somebody's account.
+func TestAnEmailIsSentOnlyWhenItChanged(t *testing.T) {
+	backend, log := fakeBackend(t, false)
+	console := served(t, backend.URL)
+
+	post(t, console, "/settings/people", url.Values{
+		"action": {"invite"}, "username": {"kai"}, "name": {"Kai"}, "email": {" kai@example.org "},
+	})
+	if sent, _ := log.last(http.MethodPost, "/v1/staff/people"); sent.Body["email"] != "kai@example.org" {
+		t.Errorf("invited with email %v", sent.Body["email"])
+	}
+
+	unchanged := url.Values{"action": {"roles"}, "pk": {"8"}, "username": {"kai"},
+		"email": {"kai@example.org"}, "email_was": {"kai@example.org"}}
+	post(t, console, "/settings/people", unchanged)
+	if _, sent := log.last(http.MethodPut, "/v1/staff/people/8/email"); sent {
+		t.Error("an unchanged address was written to the account")
+	}
+
+	changed := url.Values{"action": {"roles"}, "pk": {"8"}, "username": {"kai"},
+		"email": {"kai@neu.example"}, "email_was": {"kai@example.org"}}
+	if response, _ := post(t, console, "/settings/people", changed); response.StatusCode != http.StatusSeeOther {
+		t.Fatalf("saving = %d", response.StatusCode)
+	}
+	if sent, _ := log.last(http.MethodPut, "/v1/staff/people/8/email"); sent.Body["email"] != "kai@neu.example" {
+		t.Errorf("email sent as %v", sent.Body)
+	}
+
+	// Shown where people are listed, as a way to write to them.
+	_, rendered := get(t, console, "/collectives/c1")
+	if !strings.Contains(rendered, `href="mailto:kai@example.org"`) {
+		t.Error("a collective's people are not shown with their address")
 	}
 }
