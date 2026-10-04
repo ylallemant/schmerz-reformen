@@ -2,7 +2,6 @@ package console
 
 import (
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -34,14 +33,10 @@ type peoplePage struct {
 }
 
 type personDraft struct {
-	Username    string
-	Name        string
-	Admin       bool
-	Collectives []string
+	Username string
+	Name     string
+	Admin    bool
 }
-
-// Has reports whether the draft names a collective, for the checkboxes.
-func (d personDraft) Has(id string) bool { return slices.Contains(d.Collectives, id) }
 
 func (c *console) people(w http.ResponseWriter, r *http.Request) {
 	c.renderPeople(w, r, http.StatusOK, nil)
@@ -57,27 +52,22 @@ func (c *console) renderPeople(w http.ResponseWriter, r *http.Request, status in
 	}
 
 	listing, err := c.staff(r).People(r.Context())
-	if err != nil && !apiclient.IsRefusal(err) {
+	if err != nil && apiclient.StatusOf(err) == 0 {
+		// The backend itself is away: nothing on this page can be drawn.
 		c.fail(w, r, err)
 		return
 	}
 	data.People = listing
 	if err != nil {
-		// A refusal is said above an empty page: most often "no identity
-		// provider is configured", which an administrator should read here.
-		data.Problem = c.problemOf(data.page, err)
+		// Anything the backend answered is said above an empty page: most
+		// often "no identity provider is configured", or the directory being
+		// down, which an administrator should read here.
+		data.Problem = c.peopleProblem(data.page, err)
 	}
 	if adjust != nil {
 		adjust(&data)
 	}
 	c.renderer.Render(w, status, "people", data)
-}
-
-func rolesFrom(r *http.Request) apiclient.Roles {
-	return apiclient.Roles{
-		Admin:       r.FormValue("admin") != "",
-		Collectives: r.Form["collective"],
-	}
 }
 
 func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
@@ -99,13 +89,11 @@ func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
 
 	switch r.FormValue("action") {
 	case "invite":
-		roles := rolesFrom(r)
+		admin := r.FormValue("admin") != ""
 		name := strings.TrimSpace(r.FormValue("name"))
-		link, err := client.InvitePerson(r.Context(), username, name, roles)
+		link, err := client.InvitePerson(r.Context(), username, name, admin)
 		if err != nil {
-			refused(err, &personDraft{
-				Username: username, Name: name, Admin: roles.Admin, Collectives: roles.Collectives,
-			})
+			refused(err, &personDraft{Username: username, Name: name, Admin: admin})
 			return
 		}
 		c.renderPeople(w, r, http.StatusOK, func(data *peoplePage) { data.WayIn = &link })
@@ -119,7 +107,7 @@ func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
 		c.renderPeople(w, r, http.StatusOK, func(data *peoplePage) { data.WayIn = &link })
 
 	case "roles":
-		if err := client.SetPersonRoles(r.Context(), pk, username, rolesFrom(r)); err != nil {
+		if err := client.SetPersonAdmin(r.Context(), pk, username, r.FormValue("admin") != ""); err != nil {
 			refused(err, nil)
 			return
 		}

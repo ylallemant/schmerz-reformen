@@ -36,11 +36,12 @@ type StaffProfile struct {
 	// one is provisioned. The console keeps them to draw its menus.
 	Groups []string `json:"groups"`
 
-	Collectives []Collective `json:"collectives"`
+	// Collectives and Organisations are those the editor holds a role on.
+	Collectives   []Collective   `json:"collectives"`
+	Organisations []Organisation `json:"organisations"`
 
-	// Waiting is how many changes to organisations wait for this editor's
-	// vote.
-	Waiting int `json:"waiting"`
+	// Allowed says they may use the console at all.
+	Allowed bool `json:"allowed"`
 }
 
 // StaffMe returns what the signed-in editor may do.
@@ -65,7 +66,6 @@ type CollectiveFields struct {
 	Description string `json:"description,omitempty"`
 	Website     string `json:"website,omitempty"`
 	Contact     string `json:"contact,omitempty"`
-	AuthGroup   string `json:"auth_group,omitempty"`
 	Status      string `json:"status,omitempty"`
 
 	Place

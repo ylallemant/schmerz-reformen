@@ -4,13 +4,10 @@
   <li>{{ if .New }}{{ .T "organisation.new_title" }}{{ else }}{{ .Organisation.Name }}{{ end }}</li>
 </ol>
 <h1>{{ if .New }}{{ .T "organisation.new_title" }}{{ else }}{{ .Organisation.Name }}{{ end }}</h1>
-
-{{/* Said before the form rather than after it: an editor who expects their
-     change to be live as soon as they press the button will otherwise look
-     at the unchanged page and press it again. */}}
-<p class="lede">{{ if .New }}{{ .T "organisation.new_lede" }}{{ else }}{{ .T "organisation.edit_lede" }}{{ end }}</p>
+<p class="lede">{{ if .New }}{{ .T "organisation.new_lede" }}{{ else if .Organisation.Administers }}{{ .T "organisation.edit_lede" }}{{ else }}{{ .T "organisation.read_lede" }}{{ end }}</p>
 
 <div class="split">
+  {{ if or .New .Organisation.Administers }}
   <form class="prose" method="post" action="{{ if .New }}/organisations{{ else }}/organisations/{{ .Organisation.ID }}{{ end }}">
     <label for="name">{{ .T "field.name" }}</label>
     <input type="text" id="name" name="name" maxlength="120" required autocomplete="off" value="{{ .Form.Name }}">
@@ -39,8 +36,18 @@
 
     {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "organisation.place_hint" }}
 
-    <button class="button" type="submit">{{ .T "button.propose" }}</button>
+    <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
   </form>
+  {{ else }}
+  {{/* Everybody may read an organisation; only its administrators — and
+       the site's — change it. */}}
+  <dl class="prose facts">
+    <dt>{{ .T "field.kind" }}</dt><dd>{{ .T (printf "member_kind.%s" .Organisation.Kind) }}</dd>
+    {{ with .Organisation.Website }}<dt>{{ $.T "field.website" }}</dt><dd class="wrap-anywhere">{{ . }}</dd>{{ end }}
+    {{ with .Organisation.ParentName }}<dt>{{ $.T "field.parent" }}</dt><dd>{{ . }}</dd>{{ end }}
+    {{ with .Organisation.Place }}<dt>{{ $.T "field.place" }}</dt><dd>{{ . }}</dd>{{ end }}
+  </dl>
+  {{ end }}
 
   {{ if not .New }}
   <aside class="split-aside">
@@ -51,34 +58,35 @@
       {{ else }}
       <span class="logo-box initial" aria-hidden="true">{{ initial .Organisation.Name }}</span>
       {{ end }}
+      {{ if .Organisation.Administers }}
       <form class="profile-body" method="post" action="/organisations/{{ .Organisation.ID }}/logo" enctype="multipart/form-data">
         <label for="logo">{{ .T "logo.choose" }}
-          <span class="hint">{{ .T "organisation.logo_hint" }}</span>
+          <span class="hint">{{ .T "logo.hint" }}</span>
         </label>
         <input type="file" id="logo" name="logo" accept="image/svg+xml,image/png,image/webp,image/jpeg,image/gif">
         <div class="button-row">
-          <button class="button small" type="submit">{{ .T "button.propose" }}</button>
+          <button class="button small" type="submit">{{ .T "logo.upload" }}</button>
           {{ if .Organisation.LogoID }}
-          <button class="button danger small" type="submit" name="remove" value="1">{{ .T "organisation.propose_logo_removal" }}</button>
+          <button class="button danger small" type="submit" name="remove" value="1">{{ .T "logo.remove" }}</button>
           {{ end }}
         </div>
       </form>
+      {{ end }}
     </div>
 
-    <h2 id="pending">{{ .T "changes.pending_title" }}</h2>
-    {{ if .Organisation.Pending }}
-    <ul class="plain-list">
-      {{ $page := . }}
-      {{ range .Organisation.Pending }}
-      <li>
-        <a class="link" href="/changes/{{ .ID }}">{{ $page.T (printf "change_kind.%s" .Kind) }}</a>
-        — {{ $page.Tf "changes.tally" "Approvals" .Approvals "Rejections" .Rejections "Needed" .Needed }}
-        {{ if .CanVote }}<span class="pill">{{ $page.T "changes.your_turn" }}</span>{{ end }}
-      </li>
-      {{ end }}
-    </ul>
+    {{ if .Organisation.Administers }}
+    <h2 id="people">{{ .T "organisation.people_title" }}</h2>
+    <p class="section-note">{{ .T "organisation.people_lede" }}</p>
+    {{ if .PeopleProblem }}
+    <p class="warning" role="status">{{ .PeopleProblem }}</p>
     {{ else }}
-    <p class="empty">{{ .T "organisation.nothing_pending" }}</p>
+    {{ template "entry-people" dict "Page" . "Action" (printf "/organisations/%s/people" .Organisation.ID)
+         "Role" "admins" "Title" "organisation.admins" "Empty" "organisation.admins_empty"
+         "People" .People.Admins "Users" .Users "MayChange" true "ID" "give-admin" }}
+    {{ template "entry-people" dict "Page" . "Action" (printf "/organisations/%s/people" .Organisation.ID)
+         "Role" "members" "Title" "organisation.members" "Empty" "organisation.members_empty"
+         "People" .People.Others "Users" .Users "MayChange" true "ID" "give-member" }}
+    {{ end }}
     {{ end }}
 
     <h2>{{ .T "organisation.member_of" }}</h2>
@@ -95,7 +103,7 @@
   {{ end }}
 </div>
 
-{{ if not .New }}
+{{ if and (not .New) .Admin }}
 <form method="post" action="/organisations/{{ .Organisation.ID }}/delete"
       data-confirm="{{ .T "organisation.delete_confirm" }}">
   <fieldset class="danger-zone">

@@ -321,11 +321,6 @@ func (c *console) registerRoutes(mux *http.ServeMux) error {
 	c.registerPeopleRoutes(mux)
 
 	mux.Handle("GET /audit", c.localized(c.audit))
-
-	// Only on a console with authentication off: see development.go.
-	if c.development {
-		mux.HandleFunc("POST /development/stand-in", c.switchStandIn)
-	}
 	return nil
 }
 
@@ -363,11 +358,6 @@ type page struct {
 	// Development shows the banner saying authentication is off.
 	Development bool
 
-	// StandIn is which stand-in editor this browser is, and StandIns the
-	// ones it can switch to. Development only.
-	StandIn  int
-	StandIns []int
-
 	// Editor is who is signed in, for the corner of the navigation.
 	Editor string
 
@@ -400,10 +390,6 @@ func (c *console) newPage(r *http.Request, titleKey string) page {
 		Editor:       identity.Name,
 		Admin:        slices.Contains(identity.Groups, c.currentAdminGroup()),
 	}
-	if c.development {
-		data.StandIn = standInNumber(r)
-		data.StandIns = standInNumbers()
-	}
 	if notice := r.URL.Query().Get("notice"); notice != "" {
 		// A key, never text: the value is in a link anybody can write, and a
 		// sentence from a query string rendered as the page's own notice is a
@@ -434,12 +420,6 @@ var noticeKeys = map[string]string{
 	"deleted": "notice.deleted",
 	"logo":    "notice.logo",
 	"removed": "notice.removed",
-
-	// A proposal is not a save: the organisation stays as it was until
-	// enough other editors approve, and the notice has to say so.
-	"proposed":  "notice.proposed",
-	"voted":     "notice.voted",
-	"withdrawn": "notice.withdrawn",
 }
 
 // profile asks the backend which collectives the signed-in editor manages.

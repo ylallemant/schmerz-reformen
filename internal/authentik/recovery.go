@@ -543,7 +543,14 @@ type ConsoleToken struct {
 // run would leave a directory full of live tokens nobody can tell apart, which
 // is the opposite of revocable.
 func (c *Client) EnsureConsoleToken(ctx context.Context, appName string, userPK int) (ConsoleToken, error) {
-	identifier := appName + "-console"
+	return c.ensureAPIToken(ctx, appName+"-console", userPK,
+		"Used by the schmerz-reformen backend to read editors' groups and manage them. "+
+			"Revoking it stops every sign-in to the console.")
+}
+
+// ensureAPIToken finds a non-expiring API token by identifier, or mints one
+// for a user, and reads its key.
+func (c *Client) ensureAPIToken(ctx context.Context, identifier string, userPK int, description string) (ConsoleToken, error) {
 	out := ConsoleToken{Identifier: identifier}
 
 	var found page[struct {
@@ -581,9 +588,8 @@ func (c *Client) EnsureConsoleToken(ctx context.Context, appName string, userPK 
 		"user":       userPK,
 		// The whole point. A console credential that expires is a console that
 		// stops, and nothing about the stopping says why.
-		"expiring": false,
-		"description": "Used by the schmerz-reformen backend to read editors' groups and manage them. " +
-			"Revoking it stops every sign-in to the console.",
+		"expiring":    false,
+		"description": description,
 	}
 	if err := c.do(ctx, http.MethodPost, "/core/tokens/", body, nil); err != nil {
 		return out, fmt.Errorf("create this console's own token: %w", err)

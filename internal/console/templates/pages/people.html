@@ -35,7 +35,7 @@
       <tr>
         <th scope="col">{{ .T "people.person" }}</th>
         <th scope="col">{{ .T "people.admin" }}</th>
-        <th scope="col">{{ .T "people.collectives" }}</th>
+        <th scope="col">{{ .T "people.roles" }}</th>
         <th scope="col" class="actions-column"><span class="visually-hidden">{{ .T "people.actions" }}</span></th>
       </tr>
     </thead>
@@ -57,9 +57,17 @@
             {{ $page.T "people.admin" }}</label>
         </td>
         <td>
-          {{ range $page.People.Collectives }}
-          <label class="check"><input type="checkbox" form="roles-{{ $person.PK }}" name="collective" value="{{ .ID }}"{{ if $person.Edits .ID }} checked{{ end }}>
-            {{ .Name }}</label>
+          {{/* Read here, given on the collective's or the organisation's own
+               page: a role on an entry is decided by whoever runs it. */}}
+          {{ if .Roles }}
+          <ul class="plain-list">
+            {{ range .Roles }}
+            <li><a class="link" href="/{{ .Kind }}s/{{ .ID }}#people">{{ .Name }}</a>
+              <span class="hint">{{ $page.T (printf "role.%s_%s" .Kind .Role) }}</span></li>
+            {{ end }}
+          </ul>
+          {{ else }}
+          <span class="hint">{{ $page.T "people.no_roles" }}</span>
           {{ end }}
         </td>
         <td class="actions-column">
@@ -108,16 +116,9 @@
       <input type="text" id="person-username" name="username" maxlength="150" required autocomplete="off" value="{{ .Draft.Username }}">
     </div>
   </div>
-  <fieldset class="fieldset">
-    <legend>{{ .T "people.roles" }}</legend>
-    <label class="check"><input type="checkbox" name="admin" value="1"{{ if .Draft.Admin }} checked{{ end }}>
-      {{ .T "people.admin_role" }}</label>
-    {{ range .People.Collectives }}
-    <label class="check"><input type="checkbox" name="collective" value="{{ .ID }}"{{ if $page.Draft.Has .ID }} checked{{ end }}>
-      {{ $page.Tf "people.editor_of" "Collective" .Name }}</label>
-    {{ end }}
-    {{ if not .People.Collectives }}<p class="hint">{{ .T "people.no_collective_groups" }}</p>{{ end }}
-  </fieldset>
+  <label class="check"><input type="checkbox" name="admin" value="1"{{ if .Draft.Admin }} checked{{ end }}>
+    {{ .T "people.admin_role" }}</label>
+  <p class="hint">{{ .Tf "people.users_hint" "Group" .People.UsersGroup }}</p>
   <button class="button" type="submit" name="action" value="invite">{{ .T "people.add" }}</button>
 </form>
 {{ end }}

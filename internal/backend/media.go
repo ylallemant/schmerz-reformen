@@ -199,7 +199,7 @@ type LogoOutput struct {
 }
 
 func (a *API) staffPutCollectiveLogo(ctx context.Context, in *LogoInput) (*LogoOutput, error) {
-	who, collective, err := a.collectiveFor(ctx, in.ID)
+	who, collective, err := a.collectiveAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +227,7 @@ func (a *API) staffPutCollectiveLogo(ctx context.Context, in *LogoInput) (*LogoO
 }
 
 func (a *API) staffDeleteCollectiveLogo(ctx context.Context, in *CollectiveIDInput) (*DoneOutput, error) {
-	who, collective, err := a.collectiveFor(ctx, in.ID)
+	who, collective, err := a.collectiveAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}

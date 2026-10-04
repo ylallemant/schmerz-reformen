@@ -25,14 +25,12 @@
     {"name": "Beispiel-Sozialverband", "kind": "association",
      "place": "Berlin", "latitude": 52.5070, "longitude": 13.3900, "zoom": 13},
     {"name": "Initiative Beispielkiez", "kind": "initiative",
-     "place": "Düsseldorf-Flingern", "latitude": 51.2290, "longitude": 6.8040, "zoom": 14,
-     "pending": true, "approvals": 1}
+     "place": "Düsseldorf-Flingern", "latitude": 51.2290, "longitude": 6.8040, "zoom": 14}
   ],
   "collectives": [
     {
       "name": "Düsseldorfer Bündnis für eine soziale Stadt (Beispiel)",
       "slug": "duesseldorf",
-      "auth_group": "buendnis-duesseldorf",
       "summary": "Beispieldaten: Gewerkschaften, Mieterverein und Initiativen gegen die Kürzungen im städtischen Haushalt.",
       "description": "Dies ist ein Beispielbündnis für die lokale Entwicklungsumgebung.\n\nEs zeigt, wie ein Bündnis auf dieser Seite aussieht: wer dabei ist, woran es arbeitet, was es zuletzt gemeldet hat und wann die nächste Aktion ist.",
       "website": "https://example.org/duesseldorf",
@@ -87,7 +85,6 @@
     {
       "name": "Kölner Bündnis gegen Kürzungen (Beispiel)",
       "slug": "koeln",
-      "auth_group": "buendnis-koeln",
       "summary": "Beispieldaten: Träger der Jugendhilfe, Gewerkschaften und Elterninitiativen.",
       "place": "Köln", "latitude": 50.9375, "longitude": 6.9603, "zoom": 11,
       "members": ["Beispielverband freier Träger", "Beispiel-Gewerkschaft Erziehung"],
@@ -117,7 +114,6 @@
     {
       "name": "Leipzig bleibt sozial (Beispiel)",
       "slug": "leipzig",
-      "auth_group": "buendnis-leipzig",
       "summary": "Beispieldaten: Fahrgastverband, Gewerkschaften und Stadtteilinitiativen.",
       "place": "Leipzig", "latitude": 51.3397, "longitude": 12.3731, "zoom": 11,
       "members": ["Fahrgastverband Beispiel", "Stadtteilinitiative Ost"],
@@ -143,7 +139,6 @@
     {
       "name": "Bündnis Sozialstaat verteidigen (Beispiel)",
       "slug": "sozialstaat",
-      "auth_group": "buendnis-sozialstaat",
       "summary": "Beispieldaten: ein bundesweites Bündnis ohne festen Ort – es hat keinen Punkt auf der Karte.",
       "place": "bundesweit",
       "members": ["Beispiel-Sozialverband", "Beispiel-Gewerkschaftsbund", "Beispielpartei"],

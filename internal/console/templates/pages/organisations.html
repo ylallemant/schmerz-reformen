@@ -1,51 +1,13 @@
 {{define "content"}}
 <div class="heading-row">
   <h1>{{ .T "organisations.title" }}</h1>
+  {{ if .Admin }}
   <a class="button" href="/organisations/new">{{ template "icon-plus" }}{{ .T "organisations.new" }}</a>
+  {{ end }}
 </div>
 <p class="lede">{{ .T "organisations.lede" }}</p>
 
 {{ $page := . }}
-
-{{/* What waits for a vote comes first: it is the one part of this page that
-     asks something of whoever is reading it. */}}
-<h2 id="pending">{{ .T "changes.pending_title" }}</h2>
-{{ if .Pending }}
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th scope="col">{{ .T "changes.what" }}</th>
-        <th scope="col">{{ .T "changes.author" }}</th>
-        <th scope="col">{{ .T "changes.votes" }}</th>
-        <th scope="col" class="actions-column"><span class="visually-hidden">{{ .T "button.open" }}</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{ range .Pending }}
-      <tr>
-        <td>
-          <span class="tag">{{ $page.T (printf "change_kind.%s" .Kind) }}</span>
-          {{ .Name }}
-        </td>
-        <td>{{ if .Mine }}{{ $page.T "changes.you" }}{{ else }}{{ .AuthorName }}{{ end }}</td>
-        <td>
-          {{ $page.Tf "changes.tally" "Approvals" .Approvals "Rejections" .Rejections "Needed" .Needed }}
-          {{ if .CanVote }}<span class="pill">{{ $page.T "changes.your_turn" }}</span>{{ end }}
-        </td>
-        <td class="actions-column">
-          <a class="button{{ if not .CanVote }} secondary{{ end }} small" href="/changes/{{ .ID }}">{{ if .CanVote }}{{ $page.T "changes.review" }}{{ else }}{{ $page.T "button.open" }}{{ end }}</a>
-        </td>
-      </tr>
-      {{ end }}
-    </tbody>
-  </table>
-</div>
-{{ else }}
-<p class="empty">{{ .T "changes.pending_empty" }}</p>
-{{ end }}
-
-<h2>{{ .T "organisations.all_title" }}</h2>
 {{ if .Organisations }}
 <input type="search" class="picker-search" data-filter-for="organisation-list" hidden autocomplete="off"
        placeholder="{{ .T "picker.search" }}" aria-label="{{ .T "picker.search" }}">
@@ -74,7 +36,7 @@
         <td>{{ .Place }}</td>
         <td>{{ if .ParentID }}<a class="link" href="/organisations/{{ .ParentID }}">{{ .ParentName }}</a>{{ end }}</td>
         <td class="actions-column">
-          <a class="button secondary small" href="/organisations/{{ .ID }}">{{ $page.T "button.edit" }}</a>
+          <a class="button secondary small" href="/organisations/{{ .ID }}">{{ if .Administers }}{{ $page.T "button.edit" }}{{ else }}{{ $page.T "button.open" }}{{ end }}</a>
         </td>
       </tr>
       {{ end }}
@@ -83,31 +45,5 @@
 </div>
 {{ else }}
 <p class="empty">{{ .T "organisations.empty" }}</p>
-{{ end }}
-
-{{ if .Decided }}
-<h2>{{ .T "changes.decided_title" }}</h2>
-<div class="table-wrap">
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th scope="col">{{ .T "changes.what" }}</th>
-        <th scope="col">{{ .T "changes.author" }}</th>
-        <th scope="col">{{ .T "changes.outcome" }}</th>
-        <th scope="col" class="actions-column"><span class="visually-hidden">{{ .T "button.open" }}</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {{ range .Decided }}
-      <tr>
-        <td><span class="tag">{{ $page.T (printf "change_kind.%s" .Kind) }}</span> {{ .Name }}</td>
-        <td>{{ if .Mine }}{{ $page.T "changes.you" }}{{ else }}{{ .AuthorName }}{{ end }}</td>
-        <td>{{ template "change-status" dict "Page" $page "Status" .Status }}</td>
-        <td class="actions-column"><a class="button secondary small" href="/changes/{{ .ID }}">{{ $page.T "button.open" }}</a></td>
-      </tr>
-      {{ end }}
-    </tbody>
-  </table>
-</div>
 {{ end }}
 {{end}}

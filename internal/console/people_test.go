@@ -17,11 +17,11 @@ func TestThePeoplePageIsAnAdministrators(t *testing.T) {
 	if !strings.Contains(asAdmin, `href="/settings/people"`) {
 		t.Error("an administrator is not offered the people page — a page nothing links to is a page nobody finds")
 	}
-	_, asEditor := get(t, served(t, backend.URL, "duesseldorf"), "/collectives/c1")
+	_, asEditor := get(t, served(t, backend.URL, "schmerz-collective-buendnis-admins"), "/collectives/c1")
 	if strings.Contains(asEditor, `href="/settings/people"`) {
 		t.Error("an editor is offered the people page")
 	}
-	if response, _ := get(t, served(t, backend.URL, "duesseldorf"), "/settings/people"); response.StatusCode != http.StatusForbidden {
+	if response, _ := get(t, served(t, backend.URL, "schmerz-collective-buendnis-admins"), "/settings/people"); response.StatusCode != http.StatusForbidden {
 		t.Errorf("an editor opening the people page = %d, want 403", response.StatusCode)
 	}
 
@@ -44,7 +44,6 @@ func TestAWayInIsShownOnceAndNeverInAnAddress(t *testing.T) {
 
 	response, rendered := post(t, console, "/settings/people", url.Values{
 		"action": {"invite"}, "username": {"kai"}, "name": {"Kai"},
-		"collective": {"c1"},
 	})
 	if response.StatusCode != http.StatusOK || response.Header.Get("Location") != "" {
 		t.Fatalf("inviting = %d to %q, want the page itself", response.StatusCode, response.Header.Get("Location"))
@@ -56,9 +55,6 @@ func TestAWayInIsShownOnceAndNeverInAnAddress(t *testing.T) {
 	sent, ok := log.last(http.MethodPost, "/v1/staff/people")
 	if !ok || sent.Body["username"] != "kai" || sent.Body["admin"] != false {
 		t.Fatalf("sent %v", sent.Body)
-	}
-	if collectives, _ := sent.Body["collectives"].([]any); len(collectives) != 1 || collectives[0] != "c1" {
-		t.Errorf("collectives sent = %v", sent.Body["collectives"])
 	}
 
 	// Roles: a redirect, because nothing secret comes back.

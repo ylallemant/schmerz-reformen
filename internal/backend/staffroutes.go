@@ -3,12 +3,12 @@ package backend
 import (
 	"context"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/zerolog/log"
 
-	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
 )
 
@@ -50,11 +50,18 @@ type StaffMeOutput struct {
 		// one is provisioned. The console keeps them to draw its menus.
 		Groups []string `json:"groups"`
 
+		// Collectives are the ones they hold a role on, each saying whether
+		// they administer it or author for it.
 		Collectives []CollectiveItem `json:"collectives"`
 
-		// Waiting is how many changes to organisations this editor may vote
-		// on now: proposed by somebody else, and not voted on yet.
-		Waiting int `json:"waiting"`
+		// Organisations are the ones they administer or belong to.
+		Organisations []OrganisationItem `json:"organisations"`
+
+		// Allowed says they may use the console at all: an administrator, a
+		// user, or somebody holding a role on a collective or an organisation.
+		// Somebody the directory knows and this site gave nothing is refused
+		// at the door.
+		Allowed bool `json:"allowed"`
 	}
 }
 
@@ -69,13 +76,10 @@ func (a *API) staffMe(ctx context.Context, _ *struct{}) (*StaffMeOutput, error) 
 		return nil, err
 	}
 
-	pending, _, err := a.store.ListChanges(ctx, store.ChangeQuery{
-		Statuses: []models.ChangeStatus{models.ChangePending},
-		Page:     store.Page{Limit: 500},
-	})
+	organisations, err := a.store.OrganisationsByGroups(ctx, who.Groups)
 	if err != nil {
-		log.Error().Err(err).Msg("cannot count the changes waiting for an editor")
-		return nil, huma.Error500InternalServerError("cannot read what is waiting")
+		log.Error().Err(err).Msg("cannot read the organisations an editor belongs to")
+		return nil, huma.Error500InternalServerError("cannot read what you may do")
 	}
 
 	out := &StaffMeOutput{}
@@ -84,11 +88,12 @@ func (a *API) staffMe(ctx context.Context, _ *struct{}) (*StaffMeOutput, error) 
 	out.Body.Admin = who.Admin
 	out.Body.Groups = append([]string{}, who.Groups...)
 	out.Body.Collectives = listing.Body.Collectives
-	for _, change := range a.changeItems(ctx, who, pending) {
-		if change.CanVote {
-			out.Body.Waiting++
-		}
+	out.Body.Organisations = make([]OrganisationItem, 0, len(organisations))
+	for _, organisation := range organisations {
+		out.Body.Organisations = append(out.Body.Organisations, toOrganisationItem(organisation, nil, who))
 	}
+	out.Body.Allowed = who.Admin || slices.Contains(who.Groups, a.usersGroup()) ||
+		len(out.Body.Collectives) > 0 || len(out.Body.Organisations) > 0
 	return out, nil
 }
 
@@ -129,8 +134,8 @@ func (a *API) staffAudit(ctx context.Context, in *AuditInput) (*AuditOutput, err
 	query := store.AuditQuery{Page: store.Page{Limit: in.Limit, Offset: in.Offset}}
 	if !who.Admin {
 		managed, _, err := a.store.ListCollectives(ctx, store.CollectiveQuery{
-			AuthGroups: append([]string{}, who.Groups...),
-			Page:       store.Page{Limit: 500},
+			Groups: append([]string{}, who.Groups...),
+			Page:   store.Page{Limit: 500},
 		})
 		if err != nil {
 			log.Error().Err(err).Msg("cannot read the collectives an editor manages")

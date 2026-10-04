@@ -69,23 +69,21 @@ var changesNothingCached = map[string]string{
 	"save-theme-asset":   "the theme overlay has its own cache",
 	"delete-theme-asset": "the theme overlay has its own cache",
 
-	// Proposed changes to organisations. A proposal changes no organisation —
-	// that is the point of it — so nothing a reader sees moves until a vote
-	// applies it, and the vote route declares what that makes wrong.
-	"staff-propose-organisation":              "a proposal, applied only by a vote",
-	"staff-propose-organisation-update":       "a proposal, applied only by a vote",
-	"staff-propose-organisation-deletion":     "a proposal, applied only by a vote",
-	"staff-propose-organisation-logo":         "a proposal, applied only by a vote",
-	"staff-propose-organisation-logo-removal": "a proposal, applied only by a vote",
-	"staff-withdraw-change":                   "closes a proposal that changed nothing",
-
 	// The identity provider: who may use the console. Nothing a reader sees
 	// is cached by who edits it.
-	"console-provision-auth": "the console's own sign-in configuration",
-	"staff-invite-person":    "the directory, not the site's content",
-	"staff-set-person-roles": "the directory, not the site's content",
-	"staff-relink-person":    "the directory, not the site's content",
-	"staff-remove-person":    "the directory, not the site's content",
+	"console-provision-auth":    "the console's own sign-in configuration",
+	"staff-invite-person":       "the directory, not the site's content",
+	"staff-set-person-admin":    "the directory, not the site's content",
+	"staff-collective-grant":    "the directory, not the site's content",
+	"staff-collective-revoke":   "the directory, not the site's content",
+	"staff-organisation-grant":  "the directory, not the site's content",
+	"staff-organisation-revoke": "the directory, not the site's content",
+
+	// A new organisation is in no collective's list yet, so nothing cached
+	// names it.
+	"staff-create-organisation": "listed by nothing cached until a collective adds it",
+	"staff-relink-person":       "the directory, not the site's content",
+	"staff-remove-person":       "the directory, not the site's content",
 }
 
 // TestEveryWriteSaysWhatItMakesWrong is the test that stops the next endpoint

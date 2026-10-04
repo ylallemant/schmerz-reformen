@@ -279,9 +279,6 @@ func seed(ctx context.Context, backendURL, origin, staffToken string) {
 
 	fmt.Printf("seeded %d organisations, %d collectives, %d topics, %d updates, %d actions",
 		summary.Organisations, summary.Collectives, summary.Topics, summary.Updates, summary.Actions)
-	if summary.Waiting > 0 {
-		fmt.Printf("; proposals waiting for a vote: %d", summary.Waiting)
-	}
 	if summary.Skipped > 0 {
 		// Not a failure. A run that was already seeded has these collectives
 		// at these addresses, and finding them is the seeder working.

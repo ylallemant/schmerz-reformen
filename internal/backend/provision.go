@@ -45,6 +45,11 @@ type Provisioning struct {
 	// AdminLink is a way in for the first administrator, shown once.
 	AdminLink string
 
+	// ServiceAccount is the account the backend now works as, and
+	// ServiceAccountNote why it does not when it does not.
+	ServiceAccount     string
+	ServiceAccountNote string
+
 	// Reconciled lists what already existed in the directory and had to be
 	// brought back in line — a provider sending editors to an old address, a
 	// token somebody made expire. Empty on a first run, and on a re-run that
@@ -241,6 +246,30 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 	}
 	result.ConsoleToken = keep
 	result.Reconciled = append(result.Reconciled, keep.Repaired...)
+	apiToken := keep.Key
+
+	// And the site's own account, so it does not depend on the person who
+	// ran this staying in the directory with today's rights. Switched to only
+	// once it exists, holds its role and its token answered; anything less
+	// keeps the token just minted, and says why.
+	service, err := client.EnsureServiceAccount(ctx, appName)
+	switch {
+	case err != nil:
+		log.Error().Err(err).Msg("cannot set up the service account; keeping the operator's token")
+		result.ServiceAccountNote = "the service account could not be set up: " + err.Error()
+	case service.Ready:
+		apiToken = service.Key
+		result.ServiceAccount = service.Username
+		result.Reconciled = append(result.Reconciled, service.Repaired...)
+	default:
+		result.ServiceAccountNote = service.NotUsed
+	}
+
+	// The group of everybody who may use the console, so the first people
+	// can be added to it straight away.
+	if _, err := client.EnsureGroup(ctx, models.UsersGroupName(appName)); err != nil {
+		return result, err
+	}
 
 	if result.RecoveryReady {
 		if link, err := client.RecoveryLink(ctx, admin.PK); err != nil {
@@ -262,7 +291,7 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 		ConsoleURL:    strings.TrimSuffix(consoleURL, "/"),
 		ClientID:      provider.ClientID,
 		ClientSecret:  provider.ClientSecret,
-		APIToken:      keep.Key,
+		APIToken:      apiToken,
 		AdminGroup:    admins.PK,
 		ProvisionedBy: admin.Username,
 	}

@@ -40,21 +40,31 @@ see *Deferred* in [CLAUDE.md](CLAUDE.md).
 ### Who writes
 
 Everything on the site is written by a collective's own editors, in the
-**console**. There is no table of editors: a collective is given a **group in
-the identity provider** (Authentik, over OpenID Connect), and whoever is in
-that group manages its content. A collective adds and removes its content
-creators where its people already are.
+**console**. There is no table of editors and no roles of the site's own:
+every role is a **group in the identity provider** (Authentik, over OpenID
+Connect), and the console creates and fills those groups itself.
 
-Members of one further group — `schmerz-admins` by default — administer the
-installation: they create collectives, assign each its group, and add people
-from the console's **People** page.
+| role | group | may |
+|---|---|---|
+| administrator | `schmerz-admins` | create and delete collectives and organisations, add people, choose each collective's administrators, the theme |
+| user | `schmerz-users` | use the console and read it — which is what lets a collective or an organisation add them |
+| collective administrator | `schmerz-collective-<slug>-admins` | edit the collective, list organisations in it, choose its authors |
+| collective author | `schmerz-collective-<slug>-authors` | write its topics, their news, and its actions |
+| organisation administrator | `schmerz-organisation-<slug>-admins` | edit the organisation, choose its administrators and members |
+| organisation member | `schmerz-organisation-<slug>-members` | belong to it |
+
+A collective's and an organisation's groups are created with it, named from
+its address at that moment, and never renamed. Whoever runs a collective or an
+organisation picks its people from a list of the console's users on its own
+page; the site's administrators add people to that list from **People**.
 
 The console sets itself up in Authentik. On first start it is **locked** —
 nobody can sign in — and a setup wizard waits on its *maintenance* port, which
 is never published. Given an Authentik address and a one-off API token, it
-creates the OAuth2 provider, the application, the administrators' group, a
-recovery flow if Authentik has none, and a token of the backend's own; the
-pasted token is spent once and may expire. From then on **what an editor may
+creates the OAuth2 provider, the application, the administrators' and users'
+groups, a recovery flow if Authentik has none, and a **service account** for
+the backend — with a role holding only the permissions it needs and a token of
+its own; the pasted token is spent once and may expire. From then on **what an editor may
 do is read from Authentik by the backend** on every request, never from the
 sign-in token, and people are handed a single-use link to set up a passkey —
 no password, no email. The directory token stays in the backend; the console
@@ -64,14 +74,12 @@ Content is published without review. The other half of that bargain is the
 **audit log**: every change made through the console is recorded against the
 name of the person who made it, append-only.
 
-**Organisations are the exception.** A union, a party or an initiative is
-shared by every collective that lists it — one local branch can sit in three
-alliances — so nobody changes one alone. Creating, changing or deleting an
-organisation is a *proposal*, and it takes effect once **three editors other
-than its author** approve it (as many rejections close it). Until then the
-organisation stays exactly as readers know it. A collective's own list — which
-organisations it counts among its members, in which order — is its editors'
-to change directly.
+**Organisations are shared.** A union, a party or an initiative is listed by
+every collective it belongs to — one local branch can sit in three alliances —
+so it is not any one collective's to change. The site's administrators create
+and delete organisations; each one is kept up to date by **its own
+administrators**. A collective's own list — which organisations it counts
+among its members, in which order — is its administrators' to change.
 
 ### Who reads
 
@@ -171,9 +179,8 @@ Each launch writes to its own directory — `test/run/<timestamp>/`, with
 newest. `-latest` carries on with the previous run. Ctrl-C stops all three,
 giving each its full graceful shutdown.
 
-`-seeding` puts in example organisations — each proposed and approved by
-three other editors, the way every organisation comes to exist — and four
-example collectives with topics, updates and actions.
+`-seeding` puts in example organisations and four example collectives with
+topics, updates and actions.
 It goes through the API the way the console does, and finishes by registering
 a reader's passkey with a software authenticator — so every seeded run
 exercises the content path and the account path for real. Every organisation
@@ -200,13 +207,10 @@ Authentik instead of `--development` — set `SCHMERZ_OIDC_ISSUER` (in
 the runner prints where the wizard is. `-superuser` reopens the wizard on a run
 that is already set up.
 
-With authentication off everybody is the same stand-in editor, and nobody may
-approve their own proposal — so the local console offers four stand-ins to
-switch between (*Act as 1 2 3 4* in its navigation). Propose as one, approve
-as the other three. Seeding leaves one proposed organisation waiting for a vote.
-
-To see the console as one collective's editor rather than as an administrator,
-copy `test/.env.example` to `test/.env` and set `SCHMERZ_DEVELOPMENT_GROUPS`.
+With authentication off everybody is the same stand-in editor, an
+administrator by default. To see the console with fewer roles — one
+collective's author, say — copy `test/.env.example` to `test/.env` and set
+`SCHMERZ_DEVELOPMENT_GROUPS` to the groups above.
 
 ## Running it for real
 
@@ -217,7 +221,6 @@ The settings that matter, each available as a flag, an environment variable
 |---|---|---|
 | `site-url` | all | the public address. **Passkeys are bound to its host for ever.** |
 | `staff-token` | backend, console | the secret that makes the console the console |
-| `organisation-approvals` | backend | approvals a change to an organisation needs from editors other than its author (default 3) |
 | `settings-key` | backend | seals the stored identity-provider credentials: `openssl rand -base64 32` |
 | `admin-group` | backend, console | who administers until the wizard has run; afterwards `<name>-admins` |
 | `console-url` | console | its own public address; the wizard registers `{console-url}/auth/callback` |

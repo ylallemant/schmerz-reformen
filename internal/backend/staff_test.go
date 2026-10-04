@@ -252,33 +252,44 @@ func TestTheThemeIsAnAdministrators(t *testing.T) {
 
 // TestACollectiveWithNoGroupIsNobodysButAnAdministrators.
 //
-// It is the state a collective is created in. An empty group matching an
-// editor who is in no groups is exactly the accident worth a test.
+// An empty group matching an editor who is in no groups is exactly the
+// accident worth a test.
 func TestACollectiveWithNoGroupIsNobodysButAnAdministrators(t *testing.T) {
-	ungrouped := models.Collective{AuthGroup: ""}
-	grouped := models.Collective{AuthGroup: "duesseldorf"}
+	ungrouped := models.Collective{}
+	grouped := models.Collective{AdminGroup: "c-admins", AuthorGroup: "c-authors"}
 
 	nobody := &staff{Identity: staffauth.Identity{Subject: "s"}}
 	blank := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{""}}}
-	member := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"duesseldorf"}}}
+	admins := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"c-admins"}}}
+	authors := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"c-authors"}}}
 	other := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"koeln"}}}
 	administrator := &staff{Identity: staffauth.Identity{Subject: "s"}, Admin: true}
 
 	for name, tc := range map[string]struct {
-		who        *staff
-		collective models.Collective
-		want       bool
+		who                        *staff
+		collective                 models.Collective
+		wantAdminister, wantAuthor bool
 	}{
-		"in no group, collective with no group":      {nobody, ungrouped, false},
-		"in a blank group, collective with no group": {blank, ungrouped, false},
-		"in the group":                                 {member, grouped, true},
-		"in another group":                             {other, grouped, false},
-		"in no group, collective with a group":         {nobody, grouped, false},
-		"an administrator, collective with no group":   {administrator, ungrouped, true},
-		"an administrator, somebody else's collective": {administrator, grouped, true},
+		"in no group, collective with no group":      {nobody, ungrouped, false, false},
+		"in a blank group, collective with no group": {blank, ungrouped, false, false},
+		"its administrators":                         {admins, grouped, true, true},
+		"its authors":                                {authors, grouped, false, true},
+		"in another group":                           {other, grouped, false, false},
+		"an administrator, collective with no group": {administrator, ungrouped, true, true},
 	} {
-		if got := tc.who.manages(tc.collective); got != tc.want {
-			t.Errorf("%s: manages = %v, want %v", name, got, tc.want)
+		if got := tc.who.administers(tc.collective); got != tc.wantAdminister {
+			t.Errorf("%s: administers = %v, want %v", name, got, tc.wantAdminister)
 		}
+		if got := tc.who.authors(tc.collective); got != tc.wantAuthor {
+			t.Errorf("%s: authors = %v, want %v", name, got, tc.wantAuthor)
+		}
+	}
+
+	organisation := models.Organisation{AdminGroup: "o-admins", MemberGroup: "o-members"}
+	member := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"o-members"}}}
+	orgAdmin := &staff{Identity: staffauth.Identity{Subject: "s", Groups: []string{"o-admins"}}}
+	if member.administersOrganisation(organisation) || !orgAdmin.administersOrganisation(organisation) ||
+		blank.administersOrganisation(models.Organisation{}) {
+		t.Error("an organisation's administration does not follow its admin group")
 	}
 }

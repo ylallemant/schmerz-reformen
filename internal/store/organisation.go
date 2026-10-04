@@ -161,10 +161,82 @@ func checkParent(tx *gorm.DB, organisationID, parentID string) error {
 		if err != nil {
 			return err
 		}
-		if ancestor.ParentID == organisationID {
+		// An organisation not created yet has no identifier and cannot be
+		// anybody's ancestor; compared as one, the empty parent at the top
+		// of every chain would read as a loop.
+		if organisationID != "" && ancestor.ParentID == organisationID {
 			return ErrParentLoop
 		}
 		current = ancestor.ParentID
 	}
 	return nil
+}
+
+// ErrOrganisationSlugTaken means another organisation already has the slug.
+var ErrOrganisationSlugTaken = errors.New("another organisation already has that name in its groups")
+
+// CreateOrganisation records a new organisation, with a slug free among the
+// others: a name another organisation already took gets -2, -3… so two
+// branches called the same can both exist, each with groups of its own.
+func (s *Store) CreateOrganisation(ctx context.Context, organisation *models.Organisation, app string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		name := organisation.Slug
+		if models.Slugify(name) == "" {
+			name = organisation.Name
+		}
+		slug, err := freeOrganisationSlug(tx, name)
+		if err != nil {
+			return err
+		}
+		organisation.Slug = slug
+		organisation.AdminGroup, organisation.MemberGroup = models.OrganisationGroups(app, slug)
+		return tx.Create(organisation).Error
+	})
+}
+
+// SaveOrganisation writes a changed organisation. The slug and the groups
+// are not the form's to change: they were fixed when it was created.
+func (s *Store) SaveOrganisation(ctx context.Context, organisation *models.Organisation) error {
+	return s.db.WithContext(ctx).Model(organisation).
+		Omit("Slug", "AdminGroup", "MemberGroup", "CreatedAt").
+		Save(organisation).Error
+}
+
+// DeleteOrganisation removes one that nothing uses.
+//
+// Refused while it is in a collective or another's parent, never cascaded:
+// deleting a union must not quietly take it out of five alliances' lists.
+func (s *Store) DeleteOrganisation(ctx context.Context, id string) (models.Organisation, error) {
+	var deleted models.Organisation
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		organisation, err := organisationIn(tx, id)
+		if err != nil {
+			return err
+		}
+		if err := organisationInUse(tx, id); err != nil {
+			return err
+		}
+		deleted = organisation
+		return tx.Delete(&models.Organisation{}, "id = ?", id).Error
+	})
+	return deleted, err
+}
+
+// CheckParent refuses a parent that does not exist, or that would make the
+// organisation part of itself.
+func (s *Store) CheckParent(ctx context.Context, organisationID, parentID string) error {
+	return checkParent(s.db.WithContext(ctx), organisationID, parentID)
+}
+
+// OrganisationsByGroups returns the organisations one of these groups
+// administers or counts as members.
+func (s *Store) OrganisationsByGroups(ctx context.Context, groups []string) ([]models.Organisation, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	var organisations []models.Organisation
+	err := s.db.WithContext(ctx).
+		Where("admin_group IN ? OR member_group IN ?", groups, groups).
+		Order("name asc").Find(&organisations).Error
+	return organisations, err
 }

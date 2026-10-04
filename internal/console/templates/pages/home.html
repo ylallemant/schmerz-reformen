@@ -7,10 +7,6 @@
 </div>
 <p class="lede">{{ .T "home.lede" }}</p>
 
-{{ if .Waiting }}
-<p class="form-notice"><a class="link" href="/organisations#pending">{{ .Tf "home.waiting" "Count" .Waiting }}</a></p>
-{{ end }}
-
 {{ if .Collectives }}
 <div class="grid">
   {{ $page := . }}
@@ -25,7 +21,7 @@
     <div class="card-foot">
       <a class="link" href="/collectives/{{ .ID }}/topics">{{ $page.T "tab.topics" }}</a>
       <a class="link" href="/collectives/{{ .ID }}/actions">{{ $page.T "tab.actions" }}</a>
-      {{ if .AuthGroup }}<span class="mono" title="{{ $page.T "field.auth_group" }}">{{ .AuthGroup }}</span>{{ end }}
+      {{ if .Administers }}<span class="hint">{{ $page.T "home.you_administer" }}</span>{{ end }}
     </div>
   </article>
   {{ end }}
@@ -35,5 +31,16 @@
      an administrator creates the first collective; anybody else has to be
      put in a group by somebody who can. */}}
 <p class="empty">{{ if .Admin }}{{ .T "home.empty_admin" }}{{ else }}{{ .T "home.empty" }}{{ end }}</p>
+{{ end }}
+
+{{ if .Organisations }}
+<h2>{{ .T "home.organisations" }}</h2>
+<ul class="plain-list">
+  {{ $page := . }}
+  {{ range .Organisations }}
+  <li><a class="link" href="/organisations/{{ .ID }}">{{ .Name }}</a>
+    {{ if .Administers }}<span class="hint">{{ $page.T "home.you_administer" }}</span>{{ end }}</li>
+  {{ end }}
+</ul>
 {{ end }}
 {{end}}

@@ -48,7 +48,6 @@ func newAPI(t *testing.T) *API {
 		phrases:    phrasesFor("de"),
 		adminGroup: config.DefaultAdminGroup,
 		directory:  &directory{},
-		approvals:  config.DefaultOrganisationApprovals,
 		siteURL:    "http://localhost:8401",
 	}
 }
@@ -103,14 +102,15 @@ func as(who *caller) context.Context {
 // anonymous is a request context for somebody who is not signed in.
 func anonymous() context.Context { return context.Background() }
 
-// founded creates a published collective managed by the given group, through
-// the same handler the console calls.
-func founded(t *testing.T, a *API, name, group string) CollectiveItem {
+// founded creates a published collective at the given address, through the
+// same handler the console calls. Its groups are adminsOf(slug) and
+// authorsOf(slug).
+func founded(t *testing.T, a *API, name, slug string) CollectiveItem {
 	t.Helper()
 
 	in := &CreateCollectiveInput{}
 	in.Body.Name = name
-	in.Body.AuthGroup = group
+	in.Body.Slug = slug
 	in.Body.Status = string(models.StatusPublished)
 
 	out, err := a.staffCreateCollective(admin(), in)
@@ -167,4 +167,16 @@ func notificationsOf(t *testing.T, a *API, who *caller) []models.Notification {
 		t.Fatalf("ListNotifications: %v", err)
 	}
 	return items
+}
+
+// adminsOf and authorsOf name a collective's two groups, as founded leaves
+// them.
+func adminsOf(slug string) string {
+	admins, _ := models.CollectiveGroups(models.DefaultAppName, slug)
+	return admins
+}
+
+func authorsOf(slug string) string {
+	_, authors := models.CollectiveGroups(models.DefaultAppName, slug)
+	return authors
 }

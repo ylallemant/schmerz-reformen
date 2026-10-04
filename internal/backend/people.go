@@ -15,68 +15,69 @@ import (
 	"github.com/ylallemant/schmerz-reformen/internal/store"
 )
 
-// The people who may use the console, as the directory knows them: who
-// administers, and which collectives each edits for.
+// The people who may use the console, as the directory knows them.
 //
-// Administrators only. Every answer is read from Authentik as it is now — a
-// page that cached its staff list would be one where somebody removed in the
-// directory still appears to hold a role, which is the confusion this page
-// exists to clear up.
+// # The roles are groups
+//
+//	admin               <app>-admins: everything, everywhere
+//	user                <app>-users: may sign in and read; can be given roles
+//	collective_admin    a collective's AdminGroup: its profile, members, authors
+//	collective_author   a collective's AuthorGroup: its topics, news, actions
+//	organisation_admin  an organisation's AdminGroup: it, and its people
+//	organisation member an organisation's MemberGroup
+//
+// Who gives which: the site's administrators add people and make
+// administrators — of the site, and of each collective; a collective's
+// administrators choose its authors; an organisation's administrators choose
+// its members and its other administrators. See entrypeople.go.
 //
 // # It manages roles, never people
 //
 // This site provisioned itself into somebody else's directory. It creates
-// accounts when asked to and puts them in its own groups, and that is the
-// whole of what it does to the directory: removing somebody takes them out of
-// this site's groups and leaves their account exactly as it was. Their
-// directory may hold their mail and every other application they use.
+// accounts when asked and puts them in its own groups, and that is the whole
+// of what it does to the directory: removing somebody takes them out of this
+// site's groups and leaves their account exactly as it was.
 //
 // # No password, no email
 //
-// A person is handed a single-use recovery link, which an administrator
-// passes on themselves. Authentik has no flag that forces a password change at
-// next sign-in, so a temporary password would be a credential the
-// administrator knows that outlives the first login; a link expires, works
-// once, and ends with the person setting up their own passkey.
+// A new person is handed a single-use recovery link an administrator passes
+// on themselves, ending with their own passkey. An existing account is adopted
+// as it is, and needs nothing handed over.
 func (a *API) registerPeopleRoutes(api huma.API) {
 	huma.Register(api, adminOnly(huma.Operation{
 		OperationID: "staff-list-people",
 		Method:      http.MethodGet,
 		Path:        "/v1/staff/people",
-		Summary:     "List who may use the console",
-		Description: "Everybody in the administrators' group or in a collective's group, read " +
-			"from the identity provider now.",
-		Tags: []string{"People"},
+		Summary:     "List who may use the console, with every role they hold",
+		Tags:        []string{"People"},
 	}), a.staffListPeople)
 
 	huma.Register(api, adminOnly(huma.Operation{
 		OperationID: "staff-invite-person",
 		Method:      http.MethodPost,
 		Path:        "/v1/staff/people",
-		Summary:     "Add somebody, and mint their way in",
-		Description: "Creates the account with its roles at once and answers with a single-use " +
-			"link. Nothing is emailed and no password is set; the link is returned once and " +
-			"kept nowhere.",
+		Summary:     "Add somebody to the console",
+		Description: "Creates the account in the users' group — and the administrators' when " +
+			"asked — and answers with a single-use link, returned once. An account the " +
+			"directory already has is adopted as it is, with no link.",
 		Tags: []string{"People"},
 	}), a.staffInvitePerson)
 
 	huma.Register(api, adminOnly(huma.Operation{
-		OperationID: "staff-set-person-roles",
+		OperationID: "staff-set-person-admin",
 		Method:      http.MethodPut,
 		Path:        "/v1/staff/people/{pk}",
-		Summary:     "Change what somebody may do",
+		Summary:     "Make somebody an administrator of the site, or not",
 		Description: "Refused when it would leave nobody able to administer.",
 		Tags:        []string{"People"},
-	}), a.staffSetPersonRoles)
+	}), a.staffSetPersonAdmin)
 
 	huma.Register(api, adminOnly(huma.Operation{
 		OperationID: "staff-relink-person",
 		Method:      http.MethodPost,
 		Path:        "/v1/staff/people/{pk}/link",
 		Summary:     "Mint a fresh way in for somebody",
-		Description: "For an invitation that expired or was mislaid. A new single-use link, " +
-			"returned once.",
-		Tags: []string{"People"},
+		Tags:        []string{"People"},
 	}), a.staffRelinkPerson)
 
 	huma.Register(api, adminOnly(huma.Operation{
@@ -88,24 +89,36 @@ func (a *API) registerPeopleRoutes(api huma.API) {
 			"yourself, and for the last administrator.",
 		Tags: []string{"People"},
 	}), a.staffRemovePerson)
+
+	huma.Register(api, staffOnly(huma.Operation{
+		OperationID: "staff-list-users",
+		Method:      http.MethodGet,
+		Path:        "/v1/staff/users",
+		Summary:     "The console's users, to choose from",
+		Description: "Everybody in the users' or the administrators' group, for the pickers " +
+			"of whoever gives roles: the site's administrators, and those of a collective or " +
+			"an organisation.",
+		Tags: []string{"People"},
+	}), a.staffListUsers)
 }
 
-// PeopleCollective is a collective somebody can be made an editor of.
-type PeopleCollective struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Group string `json:"group"`
+// RoleRef is one role somebody holds on a collective or an organisation.
+type RoleRef struct {
+	// Kind is "collective" or "organisation"; Role is "admin", "author" or
+	// "member".
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
 }
 
 // PersonItem is one person with a role here.
 type PersonItem struct {
-	PK       int    `json:"pk"`
-	Username string `json:"username"`
-	Name     string `json:"name,omitempty"`
-	Admin    bool   `json:"admin"`
-
-	// Collectives are the ones they edit for, by identifier.
-	Collectives []string `json:"collectives"`
+	PK       int       `json:"pk"`
+	Username string    `json:"username"`
+	Name     string    `json:"name,omitempty"`
+	Admin    bool      `json:"admin"`
+	Roles    []RoleRef `json:"roles"`
 
 	// Self marks the administrator asking, so the controls that would lock
 	// them out of their own console can be left off.
@@ -115,46 +128,62 @@ type PersonItem struct {
 // PeopleOutput is the staff list.
 type PeopleOutput struct {
 	Body struct {
-		People      []PersonItem       `json:"people"`
-		Collectives []PeopleCollective `json:"collectives"`
+		People []PersonItem `json:"people"`
 
-		// AdminGroup is the administrators' group, named so the page can say
-		// it.
+		// AdminGroup and UsersGroup are the two global groups, named so the
+		// page can say them.
 		AdminGroup string `json:"admin_group"`
+		UsersGroup string `json:"users_group"`
 
 		// RecoveryReady says somebody added now can be given a way in.
 		RecoveryReady bool `json:"recovery_ready"`
 	}
 }
 
-// managedGroups is every group this site gives meaning to: the
-// administrators', and each collective's.
-type managedGroups struct {
-	admin       string
-	collectives []PeopleCollective
+// siteGroups is every group this site gives meaning to, and which entry and
+// role each per-entry group stands for.
+type siteGroups struct {
+	admin string
+	users string
+	roles map[string]RoleRef
 }
 
-func (m managedGroups) names() []string {
-	names := []string{m.admin}
-	for _, collective := range m.collectives {
-		if !slices.Contains(names, collective.Group) {
-			names = append(names, collective.Group)
-		}
+func (g siteGroups) names() []string {
+	names := []string{g.admin, g.users}
+	var perEntry []string
+	for name := range g.roles {
+		perEntry = append(perEntry, name)
 	}
-	return names
+	sort.Strings(perEntry)
+	return append(names, perEntry...)
 }
 
-func (a *API) managedGroups(ctx context.Context) (managedGroups, error) {
+func (a *API) siteGroups(ctx context.Context) (siteGroups, error) {
+	out := siteGroups{admin: a.currentAdminGroup(), users: a.usersGroup(), roles: map[string]RoleRef{}}
+
 	collectives, _, err := a.store.ListCollectives(ctx, store.CollectiveQuery{Page: store.Page{Limit: 500}})
 	if err != nil {
-		return managedGroups{}, err
+		return siteGroups{}, err
 	}
-	out := managedGroups{admin: a.currentAdminGroup()}
-	for _, collective := range collectives {
-		if collective.AuthGroup != "" {
-			out.collectives = append(out.collectives, PeopleCollective{
-				ID: collective.ID, Name: collective.Name, Group: collective.AuthGroup,
-			})
+	for _, c := range collectives {
+		if c.AdminGroup != "" {
+			out.roles[c.AdminGroup] = RoleRef{Kind: "collective", ID: c.ID, Name: c.Name, Role: "admin"}
+		}
+		if c.AuthorGroup != "" {
+			out.roles[c.AuthorGroup] = RoleRef{Kind: "collective", ID: c.ID, Name: c.Name, Role: "author"}
+		}
+	}
+
+	organisations, _, err := a.store.ListOrganisations(ctx, store.OrganisationQuery{Page: store.Page{Limit: 5000}})
+	if err != nil {
+		return siteGroups{}, err
+	}
+	for _, o := range organisations {
+		if o.AdminGroup != "" {
+			out.roles[o.AdminGroup] = RoleRef{Kind: "organisation", ID: o.ID, Name: o.Name, Role: "admin"}
+		}
+		if o.MemberGroup != "" {
+			out.roles[o.MemberGroup] = RoleRef{Kind: "organisation", ID: o.ID, Name: o.Name, Role: "member"}
 		}
 	}
 	return out, nil
@@ -192,9 +221,9 @@ func (a *API) staffListPeople(ctx context.Context, _ *struct{}) (*PeopleOutput, 
 	if err != nil {
 		return nil, err
 	}
-	groups, err := a.managedGroups(ctx)
+	groups, err := a.siteGroups(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("cannot list the collectives for the people page")
+		log.Error().Err(err).Msg("cannot list the site's groups for the people page")
 		return nil, huma.Error500InternalServerError("cannot list the people")
 	}
 
@@ -208,31 +237,30 @@ func (a *API) staffListPeople(ctx context.Context, _ *struct{}) (*PeopleOutput, 
 			row, seen := byPK[person.PK]
 			if !seen {
 				row = &PersonItem{
-					PK: person.PK, Username: person.Username, Name: person.Name,
-					Collectives: []string{},
-					Self:        who.Username != "" && who.Username == person.Username,
+					PK: person.PK, Username: person.Username, Name: person.Name, Roles: []RoleRef{},
+					Self: who.Username != "" && who.Username == person.Username,
 				}
 				byPK[person.PK] = row
 			}
 			if name == groups.admin {
 				row.Admin = true
 			}
-			for _, collective := range groups.collectives {
-				if collective.Group == name && !slices.Contains(row.Collectives, collective.ID) {
-					row.Collectives = append(row.Collectives, collective.ID)
-				}
+			if role, ok := groups.roles[name]; ok {
+				row.Roles = append(row.Roles, role)
 			}
 		}
 	}
 
 	out := &PeopleOutput{}
-	out.Body.AdminGroup = groups.admin
-	out.Body.Collectives = groups.collectives
-	if out.Body.Collectives == nil {
-		out.Body.Collectives = []PeopleCollective{}
-	}
+	out.Body.AdminGroup, out.Body.UsersGroup = groups.admin, groups.users
 	out.Body.People = make([]PersonItem, 0, len(byPK))
 	for _, row := range byPK {
+		sort.Slice(row.Roles, func(i, j int) bool {
+			if row.Roles[i].Name != row.Roles[j].Name {
+				return row.Roles[i].Name < row.Roles[j].Name
+			}
+			return row.Roles[i].Role < row.Roles[j].Role
+		})
 		out.Body.People = append(out.Body.People, *row)
 	}
 	// By name, so the list reads the same way twice running.
@@ -247,43 +275,10 @@ func (a *API) staffListPeople(ctx context.Context, _ *struct{}) (*PeopleOutput, 
 	if found, err := client.Check(ctx); err == nil {
 		out.Body.RecoveryReady = found.HasRecoveryFlow
 	} else {
-		// Not worth failing the page over; the warning is a nicety.
 		log.Warn().Err(err).Msg("cannot check whether the directory can onboard anybody")
 		out.Body.RecoveryReady = true
 	}
 	return out, nil
-}
-
-// RolesFields is what somebody may do: administer, and edit for these
-// collectives.
-type RolesFields struct {
-	Admin       bool     `json:"admin"`
-	Collectives []string `json:"collectives,omitempty" doc:"identifiers of the collectives they edit for"`
-}
-
-// wantedGroups resolves roles to group names, refusing a collective that does
-// not exist or has no group.
-func (groups managedGroups) wanted(roles RolesFields) ([]string, error) {
-	var names []string
-	if roles.Admin {
-		names = append(names, groups.admin)
-	}
-	for _, id := range roles.Collectives {
-		found := false
-		for _, collective := range groups.collectives {
-			if collective.ID == id {
-				if !slices.Contains(names, collective.Group) {
-					names = append(names, collective.Group)
-				}
-				found = true
-			}
-		}
-		if !found {
-			return nil, huma.Error422UnprocessableEntity(
-				"one of those collectives does not exist or has no group in the identity provider")
-		}
-	}
-	return names, nil
 }
 
 // InviteInput adds somebody.
@@ -291,7 +286,7 @@ type InviteInput struct {
 	Body struct {
 		Username string `json:"username"`
 		Name     string `json:"name"`
-		RolesFields
+		Admin    bool   `json:"admin"`
 	}
 }
 
@@ -301,9 +296,8 @@ type LinkOutput struct {
 		Username string `json:"username"`
 		Link     string `json:"link,omitempty"`
 
-		// Adopted says the account already existed and was given the roles
-		// as it is: it signs in with what it already has, so no link was
-		// minted — one can be, from its row.
+		// Adopted says the account already existed and was given its roles as
+		// it is: it signs in with what it already has, so no link was minted.
 		Adopted bool `json:"adopted"`
 	}
 }
@@ -327,24 +321,8 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 		return nil, huma.Error422UnprocessableEntity("a username and a name are both needed")
 	}
 
-	groups, err := a.managedGroups(ctx)
-	if err != nil {
-		log.Error().Err(err).Msg("cannot list the collectives to invite somebody")
-		return nil, huma.Error500InternalServerError("cannot add the person")
-	}
-	wanted, err := groups.wanted(in.Body.RolesFields)
-	if err != nil {
-		return nil, err
-	}
-	if len(wanted) == 0 {
-		// Somebody with no role is not staff here, and would be an account in
-		// the operator's directory this site can neither use nor explain.
-		return nil, huma.Error422UnprocessableEntity("give them at least one role")
-	}
-
 	// Nothing is created until the directory can hand the account over. An
-	// account that exists already needs nothing handed over: it signs in
-	// with what it has.
+	// account that exists already needs nothing handed over.
 	if _, err := client.UserByUsername(ctx, username); errors.Is(err, authentik.ErrNotFound) {
 		if found, err := client.Check(ctx); err == nil && !found.HasRecoveryFlow {
 			return nil, huma.Error409Conflict("nobody was created: the identity provider has no recovery flow, " +
@@ -352,15 +330,19 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 		}
 	}
 
+	wanted := []string{a.usersGroup()}
+	if in.Body.Admin {
+		wanted = append(wanted, a.currentAdminGroup())
+	}
 	groupPKs := map[string]string{}
 	var pks []string
-	for _, name := range wanted {
-		group, err := client.EnsureGroup(ctx, name)
+	for _, group := range wanted {
+		found, err := client.EnsureGroup(ctx, group)
 		if err != nil {
-			return nil, directoryRefusal(err, "cannot find the group "+name)
+			return nil, directoryRefusal(err, "cannot find the group "+group)
 		}
-		groupPKs[name] = group.PK
-		pks = append(pks, group.PK)
+		groupPKs[group] = found.PK
+		pks = append(pks, found.PK)
 	}
 
 	member, err := client.EnsureMember(ctx, authentik.UserSpec{Username: username, Name: name, Groups: pks}, groupPKs)
@@ -369,9 +351,10 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 			"reactivate the account there first — this site does not overrule that")
 	}
 	if err != nil {
-		return nil, directoryRefusal(err, "cannot give "+username+" their roles")
+		return nil, directoryRefusal(err, "cannot add "+username)
 	}
 	a.directory.forget(username)
+
 	out := &LinkOutput{}
 	out.Body.Username = username
 	if member.Adopted {
@@ -379,12 +362,11 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 		// recovery link would let whoever holds it replace those, so none is
 		// minted unasked; "new way in" on their row does it deliberately.
 		log.Warn().Str("by", who.Username).Str("username", username).Strs("joined", member.Joined).
-			Msg("an existing account was given roles in the console")
+			Msg("an existing account was given access to the console")
 		out.Body.Adopted = true
 		return out, nil
 	}
-	created := member.User
-	link, err := client.RecoveryLink(ctx, created.PK)
+	link, err := client.RecoveryLink(ctx, member.PK)
 	if err != nil {
 		// The account exists and cannot be handed over: said with the account
 		// named, so the administrator mints a link rather than making a second
@@ -392,25 +374,18 @@ func (a *API) staffInvitePerson(ctx context.Context, in *InviteInput) (*LinkOutp
 		return nil, directoryRefusal(err, username+" was created, and no way in could be made")
 	}
 
-	log.Warn().Str("by", who.Username).Str("username", username).Strs("groups", wanted).
+	log.Warn().Str("by", who.Username).Str("username", username).Bool("admin", in.Body.Admin).
 		Msg("somebody was added to the console")
 	out.Body.Link = link
 	return out, nil
 }
 
-// PersonInput addresses one person, with their username for the guards and
-// the cache.
-type PersonInput struct {
-	PK       int    `path:"pk"`
-	Username string `query:"username" doc:"their username, for the checks against yourself"`
-}
-
-// SetRolesInput changes what somebody may do.
-type SetRolesInput struct {
+// SetAdminInput makes somebody an administrator of the site, or not.
+type SetAdminInput struct {
 	PK   int `path:"pk"`
 	Body struct {
 		Username string `json:"username"`
-		RolesFields
+		Admin    bool   `json:"admin"`
 	}
 }
 
@@ -421,7 +396,13 @@ type DoneRolesOutput struct {
 	}
 }
 
-func (a *API) staffSetPersonRoles(ctx context.Context, in *SetRolesInput) (*DoneRolesOutput, error) {
+func doneRoles() *DoneRolesOutput {
+	out := &DoneRolesOutput{}
+	out.Body.Done = true
+	return out
+}
+
+func (a *API) staffSetPersonAdmin(ctx context.Context, in *SetAdminInput) (*DoneRolesOutput, error) {
 	who, err := mustAdmin(ctx)
 	if err != nil {
 		return nil, err
@@ -430,52 +411,55 @@ func (a *API) staffSetPersonRoles(ctx context.Context, in *SetRolesInput) (*Done
 	if err != nil {
 		return nil, err
 	}
-	groups, err := a.managedGroups(ctx)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("cannot change the roles")
-	}
-	wanted, err := groups.wanted(in.Body.RolesFields)
-	if err != nil {
-		return nil, err
-	}
-
+	adminGroup := a.currentAdminGroup()
 	if !in.Body.Admin {
-		if err := a.notTheLastAdmin(ctx, client, groups.admin, in.PK); err != nil {
+		if err := a.notTheLastAdmin(ctx, client, adminGroup, in.PK); err != nil {
 			return nil, err
 		}
 	}
-
-	for _, name := range groups.names() {
-		group, err := client.GroupByName(ctx, name)
-		if errors.Is(err, authentik.ErrNotFound) {
-			if !slices.Contains(wanted, name) {
-				continue
-			}
-			group, err = client.EnsureGroup(ctx, name)
-		}
-		if err != nil {
-			return nil, directoryRefusal(err, "cannot find the group "+name)
-		}
-		if slices.Contains(wanted, name) {
-			err = client.AddToGroup(ctx, group.PK, in.PK)
-		} else {
-			err = client.RemoveFromGroup(ctx, group.PK, in.PK)
-		}
-		if err != nil {
-			return nil, directoryRefusal(err, "cannot change "+name)
+	if err := a.setMembership(ctx, client, adminGroup, in.PK, in.Body.Admin); err != nil {
+		return nil, err
+	}
+	// An administrator stepping down stays a user, rather than losing the
+	// console altogether as a side effect.
+	if !in.Body.Admin {
+		if err := a.setMembership(ctx, client, a.usersGroup(), in.PK, true); err != nil {
+			return nil, err
 		}
 	}
 	a.directory.forget(in.Body.Username)
 
 	log.Warn().Str("by", who.Username).Str("username", in.Body.Username).Int("person", in.PK).
-		Strs("groups", wanted).Msg("somebody's roles in the console were changed")
-	out := &DoneRolesOutput{}
-	out.Body.Done = true
-	return out, nil
+		Bool("admin", in.Body.Admin).Msg("somebody's administration of the site was changed")
+	return doneRoles(), nil
+}
+
+// setMembership puts somebody in a group or takes them out, creating the
+// group when somebody has to be put in it.
+func (a *API) setMembership(ctx context.Context, client *authentik.Client, name string, pk int, want bool) error {
+	group, err := client.GroupByName(ctx, name)
+	if errors.Is(err, authentik.ErrNotFound) {
+		if !want {
+			return nil
+		}
+		group, err = client.EnsureGroup(ctx, name)
+	}
+	if err != nil {
+		return directoryRefusal(err, "cannot find the group "+name)
+	}
+	if want {
+		err = client.AddToGroup(ctx, group.PK, pk)
+	} else {
+		err = client.RemoveFromGroup(ctx, group.PK, pk)
+	}
+	if err != nil {
+		return directoryRefusal(err, "cannot change "+name)
+	}
+	return nil
 }
 
 // notTheLastAdmin refuses a change that would leave nobody able to administer
-// — the same shape as a collective's last admin or an account's last passkey.
+// — the same shape as an account's last passkey.
 func (a *API) notTheLastAdmin(ctx context.Context, client *authentik.Client, adminGroup string, pk int) error {
 	admins, err := client.UsersInGroup(ctx, adminGroup)
 	if err != nil {
@@ -524,6 +508,13 @@ func (a *API) staffRelinkPerson(ctx context.Context, in *RelinkInput) (*LinkOutp
 	return out, nil
 }
 
+// PersonInput addresses one person, with their username for the guards and
+// the cache.
+type PersonInput struct {
+	PK       int    `path:"pk"`
+	Username string `query:"username" doc:"their username, for the checks against yourself"`
+}
+
 func (a *API) staffRemovePerson(ctx context.Context, in *PersonInput) (*DoneRolesOutput, error) {
 	who, err := mustAdmin(ctx)
 	if err != nil {
@@ -539,7 +530,7 @@ func (a *API) staffRemovePerson(ctx context.Context, in *PersonInput) (*DoneRole
 	if in.Username != "" && in.Username == who.Username {
 		return nil, huma.Error409Conflict("you cannot remove yourself — another administrator can")
 	}
-	groups, err := a.managedGroups(ctx)
+	groups, err := a.siteGroups(ctx)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("cannot remove the person")
 	}
@@ -548,22 +539,102 @@ func (a *API) staffRemovePerson(ctx context.Context, in *PersonInput) (*DoneRole
 	}
 
 	for _, name := range groups.names() {
-		group, err := client.GroupByName(ctx, name)
-		if errors.Is(err, authentik.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, directoryRefusal(err, "cannot find the group "+name)
-		}
-		if err := client.RemoveFromGroup(ctx, group.PK, in.PK); err != nil {
-			return nil, directoryRefusal(err, "cannot change "+name)
+		if err := a.setMembership(ctx, client, name, in.PK, false); err != nil {
+			return nil, err
 		}
 	}
 	a.directory.forget(in.Username)
 
 	log.Warn().Str("by", who.Username).Str("username", in.Username).Int("person", in.PK).
 		Msg("somebody was taken out of every one of this site's groups; their account is untouched")
-	out := &DoneRolesOutput{}
-	out.Body.Done = true
+	return doneRoles(), nil
+}
+
+// UserItem is a console user, to choose from.
+type UserItem struct {
+	PK       int    `json:"pk"`
+	Username string `json:"username"`
+	Name     string `json:"name,omitempty"`
+}
+
+// UsersOutput is the console's users.
+type UsersOutput struct {
+	Body struct {
+		Users []UserItem `json:"users"`
+	}
+}
+
+// givesRoles reports whether somebody may give any role: the site's
+// administrators, and those of any collective or organisation.
+func (a *API) givesRoles(ctx context.Context, who *staff) (bool, error) {
+	if who.Admin {
+		return true, nil
+	}
+	collectives, _, err := a.store.ListCollectives(ctx, store.CollectiveQuery{Groups: append([]string{}, who.Groups...)})
+	if err != nil {
+		return false, err
+	}
+	for _, c := range collectives {
+		if who.administers(c) {
+			return true, nil
+		}
+	}
+	organisations, err := a.store.OrganisationsByGroups(ctx, who.Groups)
+	if err != nil {
+		return false, err
+	}
+	for _, o := range organisations {
+		if who.administersOrganisation(o) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *API) staffListUsers(ctx context.Context, _ *struct{}) (*UsersOutput, error) {
+	who, err := mustStaff(ctx)
+	if err != nil {
+		return nil, err
+	}
+	allowed, err := a.givesRoles(ctx, who)
+	if err != nil {
+		log.Error().Err(err).Msg("cannot read what an editor administers")
+		return nil, huma.Error500InternalServerError("cannot list the users")
+	}
+	if !allowed {
+		return nil, huma.Error403Forbidden("only somebody who gives roles may list the console's users")
+	}
+	client, err := a.peopleClient()
+	if err != nil {
+		return nil, err
+	}
+
+	seen := map[int]bool{}
+	out := &UsersOutput{}
+	out.Body.Users = []UserItem{}
+	for _, group := range []string{a.usersGroup(), a.currentAdminGroup()} {
+		members, err := client.UsersInGroup(ctx, group)
+		if err != nil {
+			return nil, directoryRefusal(err, "cannot read who is in "+group)
+		}
+		for _, person := range members {
+			if seen[person.PK] || !person.IsActive {
+				continue
+			}
+			seen[person.PK] = true
+			out.Body.Users = append(out.Body.Users, UserItem{PK: person.PK, Username: person.Username, Name: person.Name})
+		}
+	}
+	sortUsers(out.Body.Users)
 	return out, nil
+}
+
+// sortUsers orders by name, then username.
+func sortUsers(users []UserItem) {
+	slices.SortFunc(users, func(x, y UserItem) int {
+		if c := strings.Compare(x.Name, y.Name); c != 0 {
+			return c
+		}
+		return strings.Compare(x.Username, y.Username)
+	})
 }

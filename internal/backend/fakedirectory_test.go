@@ -45,6 +45,13 @@ type fakeDirectory struct {
 
 	// refuseToken makes every call answer 403, as an expired token does.
 	refuseToken bool
+
+	// unknownPermissions are permissions this instance does not have.
+	unknownPermissions map[string]bool
+	roles              []map[string]any
+	assigned           map[string][]any
+	groupRoles         map[string][]any
+	bearers            []string
 }
 
 type fakeUser struct {
@@ -108,6 +115,18 @@ func (f *fakeDirectory) groupNamed(name string) *fakeGroup {
 	group := &fakeGroup{PK: "uuid-" + name, Name: name}
 	f.groups[group.PK] = group
 	return group
+}
+
+// usedBearer reports whether any call came with this token.
+func (f *fakeDirectory) usedBearer(token string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, bearer := range f.bearers {
+		if bearer == token {
+			return true
+		}
+	}
+	return false
 }
 
 // accountsNamed counts the accounts with a username.
@@ -217,6 +236,7 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimPrefix(r.URL.Path, "/api/v3")
 	f.calls = append(f.calls, r.Method+" "+path)
+	f.bearers = append(f.bearers, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 	var body map[string]any
 	if r.Body != nil {
 		json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck
@@ -263,6 +283,15 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		answer(200, page(results))
 
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/core/users/") && path != "/core/users/":
+		pk, _ := strconv.Atoi(strings.Trim(strings.TrimPrefix(path, "/core/users/"), "/"))
+		user, ok := f.users[pk]
+		if !ok {
+			answer(404, map[string]any{"detail": "Not found."})
+			return
+		}
+		answer(200, f.userJSON(user))
+
 	case r.Method == http.MethodPost && path == "/core/users/":
 		user := &fakeUser{PK: f.id(), Username: body["username"].(string), Name: body["name"].(string), Active: true}
 		if groups, ok := body["groups"].([]any); ok {
@@ -285,10 +314,53 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		var results []any
 		for _, group := range f.groups {
 			if name := query.Get("name"); name == "" || group.Name == name {
-				results = append(results, map[string]any{"pk": group.PK, "name": group.Name})
+				results = append(results, map[string]any{"pk": group.PK, "name": group.Name, "roles": f.groupRoles[group.PK]})
 			}
 		}
 		answer(200, page(results))
+
+	case r.Method == http.MethodPatch && strings.HasPrefix(path, "/core/groups/"):
+		pk := strings.Trim(strings.TrimPrefix(path, "/core/groups/"), "/")
+		if f.groupRoles == nil {
+			f.groupRoles = map[string][]any{}
+		}
+		if roles, ok := body["roles"].([]any); ok {
+			f.groupRoles[pk] = roles
+		}
+		answer(200, map[string]any{"pk": pk})
+
+	case r.Method == http.MethodGet && path == "/rbac/permissions/":
+		codename, app := query.Get("codename"), query.Get("content_type__app_label")
+		if f.unknownPermissions[app+"."+codename] {
+			answer(200, page(nil))
+			return
+		}
+		answer(200, page([]any{map[string]any{"codename": codename, "app_label": app}}))
+
+	case r.Method == http.MethodGet && path == "/rbac/roles/":
+		results := []any{}
+		for _, role := range f.roles {
+			results = append(results, role)
+		}
+		answer(200, page(results))
+
+	case r.Method == http.MethodPost && path == "/rbac/roles/":
+		role := map[string]any{"pk": "role-" + fmt.Sprint(body["name"]), "name": body["name"]}
+		f.roles = append(f.roles, role)
+		answer(201, role)
+
+	case r.Method == http.MethodPost && strings.HasPrefix(path, "/rbac/permissions/assigned_by_roles/"):
+		if f.assigned == nil {
+			f.assigned = map[string][]any{}
+		}
+		rolePK := strings.Split(strings.TrimPrefix(path, "/rbac/permissions/assigned_by_roles/"), "/")[0]
+		f.assigned[rolePK], _ = body["permissions"].([]any)
+		answer(204, nil)
+
+	case r.Method == http.MethodPost && path == "/core/users/service_account/":
+		user := &fakeUser{PK: f.id(), Username: body["name"].(string), Name: body["name"].(string), Active: true}
+		f.users[user.PK] = user
+		answer(200, map[string]any{"username": user.Username, "user_pk": user.PK, "token": "an-app-password", "user_uid": "u"})
 
 	case r.Method == http.MethodPost && path == "/core/groups/":
 		group := f.groupNamed(body["name"].(string))
@@ -431,7 +503,7 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && path == "/core/tokens/":
 		identifier := body["identifier"].(string)
 		f.tokens[identifier] = map[string]any{
-			"identifier": identifier, "intent": body["intent"], "expiring": body["expiring"],
+			"identifier": identifier, "intent": body["intent"], "expiring": body["expiring"], "user": body["user"],
 		}
 		answer(201, f.tokens[identifier])
 
@@ -447,7 +519,8 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		answer(200, token)
 
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/core/tokens/") && strings.HasSuffix(path, "/view_key/"):
-		answer(200, map[string]any{"key": "the-backends-own-token"})
+		identifier := strings.TrimSuffix(strings.TrimPrefix(path, "/core/tokens/"), "/view_key/")
+		answer(200, map[string]any{"key": "key-of-" + identifier})
 
 	case r.Method == http.MethodGet && (strings.HasPrefix(path, "/stages/") || path == "/flows/bindings/"):
 		var results []any

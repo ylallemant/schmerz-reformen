@@ -56,7 +56,7 @@ func TestAnEditorSeesOnlyTheirOwnCollectives(t *testing.T) {
 	mine := collective(t, s, "Bündnis Düsseldorf")
 	collective(t, s, "Bündnis Köln")
 
-	got, total, err := s.ListCollectives(ctx, CollectiveQuery{AuthGroups: []string{mine.AuthGroup}})
+	got, total, err := s.ListCollectives(ctx, CollectiveQuery{Groups: []string{mine.AuthorGroup}})
 	if err != nil {
 		t.Fatalf("ListCollectives: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestAnEditorSeesOnlyTheirOwnCollectives(t *testing.T) {
 	// **In no group is not the same as unrestricted.** Reading an empty list
 	// as "no filter" would hand everything to exactly the person with the
 	// least claim to it.
-	none, total, err := s.ListCollectives(ctx, CollectiveQuery{AuthGroups: []string{}})
+	none, total, err := s.ListCollectives(ctx, CollectiveQuery{Groups: []string{}})
 	if err != nil {
 		t.Fatalf("ListCollectives: %v", err)
 	}

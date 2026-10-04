@@ -43,6 +43,7 @@ func migrateLegacyMembers(db *gorm.DB) error {
 		LogoID       string
 	}
 
+	app := appName(db)
 	moved := 0
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var rows []legacyMember
@@ -71,6 +72,12 @@ func migrateLegacyMembers(db *gorm.DB) error {
 				organisation := models.Organisation{OrganisationValues: models.OrganisationValues{
 					Name: row.Name, Kind: kind, Website: row.Website, LogoID: row.LogoID,
 				}}
+				slug, err := freeOrganisationSlug(tx, row.Name)
+				if err != nil {
+					return err
+				}
+				organisation.Slug = slug
+				organisation.AdminGroup, organisation.MemberGroup = models.OrganisationGroups(app, slug)
 				if err := tx.Create(&organisation).Error; err != nil {
 					return err
 				}

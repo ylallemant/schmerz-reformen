@@ -18,6 +18,7 @@ func (c *console) registerCollectiveRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /collectives/{id}/delete", c.localized(c.deleteCollective))
 
 	mux.Handle("POST /collectives/{id}/members", c.localized(c.createMember))
+	mux.Handle("POST /collectives/{id}/people", c.localized(c.saveCollectivePeople))
 	mux.Handle("GET /collectives/{id}/members/{member}", c.localized(c.member))
 	mux.Handle("POST /collectives/{id}/members/{member}", c.localized(c.saveMember))
 	mux.Handle("POST /collectives/{id}/members/{member}/delete", c.localized(c.deleteMember))
@@ -28,10 +29,8 @@ type homePage struct {
 	page
 	Collectives []apiclient.Collective
 
-	// Waiting is how many changes to organisations wait for this editor's
-	// vote — the one thing on this console that is waiting for them rather
-	// than for their collective.
-	Waiting int
+	// Organisations are those the editor administers or belongs to.
+	Organisations []apiclient.Organisation
 }
 
 func (c *console) home(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +42,7 @@ func (c *console) home(w http.ResponseWriter, r *http.Request) {
 
 	data := homePage{page: c.newPage(r, "home.title")}
 	data.Collectives = profile.Collectives
-	data.Waiting = profile.Waiting
+	data.Organisations = profile.Organisations
 	c.renderer.Render(w, http.StatusOK, "home", data)
 }
 
@@ -68,6 +67,14 @@ type collectivePage struct {
 	// Organisations are what the member picker offers. Loaded only for a
 	// collective that exists: the form that creates one has no members yet.
 	Organisations []apiclient.Organisation
+
+	// People is who administers it and who writes for it, and Users who can
+	// be given a role — filled for its administrators only.
+	People apiclient.EntryPeople
+	Users  []apiclient.User
+
+	// PeopleProblem says why People could not be read.
+	PeopleProblem string
 }
 
 func collectiveForm(collective apiclient.Collective) apiclient.CollectiveFields {
@@ -78,7 +85,6 @@ func collectiveForm(collective apiclient.Collective) apiclient.CollectiveFields 
 		Description: collective.Description,
 		Website:     collective.Website,
 		Contact:     collective.Contact,
-		AuthGroup:   collective.AuthGroup,
 		Status:      collective.Status,
 		Place: apiclient.Place{
 			Latitude: collective.Latitude, Longitude: collective.Longitude, Place: collective.Place,
@@ -94,7 +100,6 @@ func collectiveFieldsFrom(r *http.Request) apiclient.CollectiveFields {
 		Description: r.FormValue("description"),
 		Website:     r.FormValue("website"),
 		Contact:     r.FormValue("contact"),
-		AuthGroup:   r.FormValue("auth_group"),
 		Status:      r.FormValue("status"),
 		Place:       placeFrom(r),
 	}
@@ -154,7 +159,8 @@ func (c *console) renderCollective(w http.ResponseWriter, r *http.Request, statu
 		return
 	}
 
-	organisations, err := c.staff(r).Organisations(r.Context())
+	client := c.staff(r)
+	organisations, err := client.Organisations(r.Context())
 	if err != nil {
 		c.fail(w, r, err)
 		return
@@ -164,6 +170,11 @@ func (c *console) renderCollective(w http.ResponseWriter, r *http.Request, statu
 	data.Collective = collective
 	data.Form = collectiveForm(collective)
 	data.Organisations = availableOrganisations(organisations, collective.Members)
+	if collective.Administers {
+		data.People, data.Users, data.PeopleProblem = c.entryPeople(r, data.page, func() (apiclient.EntryPeople, error) {
+			return client.CollectivePeople(r.Context(), collective.ID)
+		})
+	}
 	if adjust != nil {
 		adjust(&data)
 	}
@@ -257,6 +268,15 @@ func (c *console) deleteCollective(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirect(w, r, "/", "deleted")
+}
+
+func (c *console) saveCollectivePeople(w http.ResponseWriter, r *http.Request) {
+	c.saveEntryPeople(w, r, "collectives", "/collectives/"+r.PathValue("id"),
+		func(w http.ResponseWriter, r *http.Request, problem string) {
+			c.renderCollective(w, r, http.StatusUnprocessableEntity, func(data *collectivePage) {
+				data.Problem = problem
+			})
+		})
 }
 
 // --- member organisations ---

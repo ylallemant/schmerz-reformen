@@ -39,7 +39,7 @@ type MemberOutput struct {
 }
 
 func (a *API) staffCreateMember(ctx context.Context, in *CreateMemberInput) (*MemberOutput, error) {
-	who, collective, err := a.collectiveFor(ctx, in.ID)
+	who, collective, err := a.collectiveAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,9 +90,9 @@ func (a *API) memberFor(ctx context.Context, id string) (*staff, models.Collecti
 		return nil, models.CollectiveMember{}, huma.Error500InternalServerError("cannot read the organisation")
 	}
 
-	who, _, err := a.collectiveFor(ctx, member.CollectiveID)
+	who, _, err := a.collectiveAdminFor(ctx, member.CollectiveID)
 	if err != nil {
-		return nil, models.CollectiveMember{}, huma.Error404NotFound("no such organisation")
+		return nil, models.CollectiveMember{}, err
 	}
 	return who, member, nil
 }

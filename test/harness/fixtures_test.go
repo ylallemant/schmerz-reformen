@@ -31,12 +31,10 @@ func TestTheFixturesAreUsable(t *testing.T) {
 		if organisation.Parent != "" && !organisations[organisation.Parent] {
 			t.Errorf("%q is part of %q, which is not listed before it", organisation.Name, organisation.Parent)
 		}
-		if !organisation.Pending {
-			organisations[organisation.Name] = true
-		}
+		organisations[organisation.Name] = true
 	}
 
-	slugs, groups := map[string]bool{}, map[string]bool{}
+	slugs := map[string]bool{}
 	for _, collective := range file.Collectives {
 		for _, member := range collective.Members {
 			if !organisations[member] {
@@ -44,19 +42,15 @@ func TestTheFixturesAreUsable(t *testing.T) {
 			}
 		}
 
-		if collective.Name == "" || collective.Slug == "" || collective.AuthGroup == "" {
-			t.Errorf("collective %q needs a name, an address and a group", collective.Name)
+		// The address names the collective's groups too, so a local run's
+		// --development-groups can name them in advance.
+		if collective.Name == "" || collective.Slug == "" {
+			t.Errorf("collective %q needs a name and an address", collective.Name)
 		}
 		if slugs[collective.Slug] {
 			t.Errorf("two collectives answer at %q; the second would be refused", collective.Slug)
 		}
 		slugs[collective.Slug] = true
-		// One group per collective, so a local run with
-		// --development-groups shows an editor exactly one of them.
-		if groups[collective.AuthGroup] {
-			t.Errorf("two collectives are managed by %q", collective.AuthGroup)
-		}
-		groups[collective.AuthGroup] = true
 
 		// Fixtures must never put words in the mouth of a real organisation.
 		// The marker in the name is what a reader of a local run sees.

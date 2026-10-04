@@ -30,9 +30,8 @@ func TestOnlyAnAdministratorFoundsACollective(t *testing.T) {
 
 	in := &CreateCollectiveInput{}
 	in.Body.Name = "Bündnis Düsseldorf"
-	in.Body.AuthGroup = "duesseldorf"
 
-	if _, err := a.staffCreateCollective(editor("Dominique", "duesseldorf"), in); statusOf(err) != http.StatusForbidden {
+	if _, err := a.staffCreateCollective(editor("Dominique", adminsOf("duesseldorf")), in); statusOf(err) != http.StatusForbidden {
 		t.Errorf("an editor creating a collective: %v, want 403", err)
 	}
 
@@ -61,7 +60,7 @@ func TestAnEditorManagesTheirOwnCollectiveAndNoOther(t *testing.T) {
 	a := newAPI(t)
 	mine := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
 	theirs := founded(t, a, "Bündnis Köln", "koeln")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 
 	listing, err := a.staffListCollectives(me, nil)
 	if err != nil {
@@ -93,7 +92,7 @@ func TestAnEditorManagesTheirOwnCollectiveAndNoOther(t *testing.T) {
 
 	// And everything hanging off another collective is as unreachable as the
 	// collective itself.
-	theirEditor := editor("Camille", "koeln")
+	theirEditor := editor("Camille", adminsOf("koeln"))
 	theirTopic := raised(t, a, theirEditor, theirs.ID, "Schwimmbad schließt")
 	theirAction := announced(t, a, theirEditor, theirs.ID, "Demo", time.Now().Add(48*time.Hour))
 
@@ -122,10 +121,10 @@ func TestAnEditorManagesTheirOwnCollectiveAndNoOther(t *testing.T) {
 
 // TestAnEditorCannotMoveACollectiveOrReassignIt.
 //
-// The address is in every link already printed and the group decides who is
-// an editor at all. An editor's form posts both fields, so they are ignored
-// rather than refused — saving a description must not be an error.
-func TestAnEditorCannotMoveACollectiveOrReassignIt(t *testing.T) {
+// The address is in every link already printed, and the groups were named
+// when the collective was created. An editor's form posts the address, so it
+// is ignored rather than refused — saving a description must not be an error.
+func TestAnEditorCannotMoveACollective(t *testing.T) {
 	a := newAPI(t)
 	mine := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
 
@@ -133,42 +132,82 @@ func TestAnEditorCannotMoveACollectiveOrReassignIt(t *testing.T) {
 	in.Body.Name = "Bündnis Düsseldorf gegen Kürzungen"
 	in.Body.Summary = "Gewerkschaften, Mieterverein und Parteien gemeinsam."
 	in.Body.Slug = "ganz-woanders"
-	in.Body.AuthGroup = "meine-freunde"
 
-	out, err := a.staffSaveCollective(editor("Dominique", "duesseldorf"), in)
+	out, err := a.staffSaveCollective(editor("Dominique", adminsOf("duesseldorf")), in)
 	if err != nil {
 		t.Fatalf("staffSaveCollective: %v", err)
 	}
 	if out.Body.Name != in.Body.Name || out.Body.Summary != in.Body.Summary {
 		t.Errorf("the profile was not saved: %+v", out.Body)
 	}
-	if out.Body.Slug != "buendnis-duesseldorf" {
+	if out.Body.Slug != "duesseldorf" {
 		t.Errorf("slug = %q: an editor moved the collective", out.Body.Slug)
 	}
-	if out.Body.AuthGroup != "duesseldorf" {
-		t.Errorf("group = %q: an editor reassigned the collective", out.Body.AuthGroup)
-	}
 
-	// An administrator can do both — and a blank address keeps the one there
-	// is, so renaming does not move it out from under its links.
-	in.Body.Slug = ""
-	in.Body.AuthGroup = "duesseldorf-redaktion"
+	// An administrator can move it — and its groups stay what they were, so
+	// nobody in them loses their role.
+	in.Body.Slug = "duesseldorf-neu"
 	out, err = a.staffSaveCollective(admin(), in)
 	if err != nil {
 		t.Fatalf("staffSaveCollective as admin: %v", err)
 	}
-	if out.Body.Slug != "buendnis-duesseldorf" {
-		t.Errorf("slug = %q: a blank address moved the collective", out.Body.Slug)
+	if out.Body.Slug != "duesseldorf-neu" || out.Body.AdminGroup != adminsOf("duesseldorf") {
+		t.Errorf("slug %q, admins %q: the groups must not follow the slug", out.Body.Slug, out.Body.AdminGroup)
 	}
-	if out.Body.AuthGroup != "duesseldorf-redaktion" {
-		t.Errorf("group = %q, want the administrator's change", out.Body.AuthGroup)
+	if _, err := a.staffGetCollective(editor("Dominique", adminsOf("duesseldorf")),
+		&CollectiveIDInput{ID: mine.ID}); err != nil {
+		t.Errorf("the collective's administrator lost it when it moved: %v", err)
+	}
+}
+
+// TestAnAuthorPublishesAndDoesNotAdminister: an author writes the topics,
+// news and actions; the profile, the member organisations and who writes are
+// the collective's administrators'.
+func TestAnAuthorPublishesAndDoesNotAdminister(t *testing.T) {
+	a := newAPI(t)
+	mine := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
+	author := editor("Kai", authorsOf("duesseldorf"))
+
+	raised(t, a, author, mine.ID, "Haushalt 2027")
+
+	in := &SaveCollectiveInput{ID: mine.ID}
+	in.Body.Name = "Umbenannt"
+	if _, err := a.staffSaveCollective(author, in); statusOf(err) != http.StatusForbidden {
+		t.Errorf("an author saving the profile: status %d, want 403", statusOf(err))
+	}
+	add := &CreateMemberInput{ID: mine.ID}
+	add.Body.OrganisationID = "anything"
+	if _, err := a.staffCreateMember(author, add); statusOf(err) != http.StatusForbidden {
+		t.Errorf("an author adding a member: status %d, want 403", statusOf(err))
+	}
+	got, err := a.staffGetCollective(author, &CollectiveIDInput{ID: mine.ID})
+	if err != nil || !got.Body.Authors || got.Body.Administers {
+		t.Errorf("an author reading it: %v, authors %v administers %v", err, got.Body.Authors, got.Body.Administers)
 	}
 
-	// Which takes it away from the editor who had it a moment ago: there is no
-	// table of editors, only the answer to "which group manages this".
-	if _, err := a.staffGetCollective(editor("Dominique", "duesseldorf"),
-		&CollectiveIDInput{ID: mine.ID}); statusOf(err) != http.StatusNotFound {
-		t.Errorf("the old group still manages the collective: %v", err)
+	// Somebody with no role on it: not even told it exists.
+	if _, err := a.staffGetCollective(editor("Nobody", authorsOf("koeln")), &CollectiveIDInput{ID: mine.ID}); statusOf(err) != http.StatusNotFound {
+		t.Errorf("no role: status %d, want 404", statusOf(err))
+	}
+}
+
+// TestAUserWritesNothing: being in the users' group lets somebody into the
+// console so a collective or an organisation can add them — and does not, by
+// itself, let them write a word.
+func TestAUserWritesNothing(t *testing.T) {
+	a := newAPI(t)
+	mine := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
+	user := editor("Uma", models.UsersGroupName(models.DefaultAppName))
+
+	in := &CreateTopicInput{ID: mine.ID}
+	in.Body.Title, in.Body.Kind, in.Body.Level = "Haushalt 2027", "cut", "municipal"
+	if _, err := a.staffCreateTopic(user, in); err == nil {
+		t.Error("a user with no role on the collective wrote a topic for it")
+	}
+	save := &SaveCollectiveInput{ID: mine.ID}
+	save.Body.Name = "Umbenannt"
+	if _, err := a.staffSaveCollective(user, save); err == nil {
+		t.Error("a user with no role on the collective changed it")
 	}
 }
 
@@ -177,7 +216,7 @@ func TestAnEditorCannotMoveACollectiveOrReassignIt(t *testing.T) {
 func TestADraftAnswersAsIfItDidNotExist(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 
 	draftIn := &CreateTopicInput{ID: owner.ID}
 	draftIn.Body.Title, draftIn.Body.Kind, draftIn.Body.Level = "Noch geheim", "cut", "municipal"
@@ -215,7 +254,7 @@ func TestADraftAnswersAsIfItDidNotExist(t *testing.T) {
 func TestContentIsPublicOnlyWhileItsCollectiveIs(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 	about := raised(t, a, me, owner.ID, "100 Millionen weniger")
 	demo := announced(t, a, me, owner.ID, "Demo", time.Now().Add(48*time.Hour))
 
@@ -285,7 +324,7 @@ func second[T any](_ T, err error) error { return err }
 func TestTheCachedListingDoesNotLendOneReadersAnswersToAnother(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	demo := announced(t, a, editor("Dominique", "duesseldorf"), owner.ID, "Demo", time.Now().Add(48*time.Hour))
+	demo := announced(t, a, editor("Dominique", adminsOf("duesseldorf")), owner.ID, "Demo", time.Now().Add(48*time.Hour))
 
 	coming := reader(t, a, "Camille")
 	other := reader(t, a, "Alex")
@@ -340,9 +379,9 @@ func TestTheCachedListingDoesNotLendOneReadersAnswersToAnother(t *testing.T) {
 	if mine.Body.Followers != 1 || theirs.Body.Followers != 1 {
 		t.Errorf("followers = %d and %d, want the same count for both", mine.Body.Followers, theirs.Body.Followers)
 	}
-	// And the reader is never told which group manages a collective.
-	if mine.Body.AuthGroup != "" {
-		t.Errorf("a reader was told the managing group: %q", mine.Body.AuthGroup)
+	// And the reader is never told which groups run a collective.
+	if mine.Body.AdminGroup != "" || mine.Body.AuthorGroup != "" {
+		t.Errorf("a reader was told the groups: %q / %q", mine.Body.AdminGroup, mine.Body.AuthorGroup)
 	}
 }
 
@@ -350,7 +389,7 @@ func TestTheCachedListingDoesNotLendOneReadersAnswersToAnother(t *testing.T) {
 func TestNewsIsToldOnceToWhoeverFollows(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 	about := raised(t, a, me, owner.ID, "100 Millionen weniger")
 
 	both := reader(t, a, "Camille")      // follows the collective and the topic
@@ -435,7 +474,7 @@ func TestNewsIsToldOnceToWhoeverFollows(t *testing.T) {
 func TestPeopleWhoWereComingAreToldWhenThePlanChanges(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 	starts := time.Now().Add(72 * time.Hour).Truncate(time.Minute)
 	demo := announced(t, a, me, owner.ID, "Demo vor dem Rathaus", starts)
 
@@ -519,20 +558,20 @@ func TestAnActionCanOnlyPointAtItsOwnCollectivesTopic(t *testing.T) {
 	a := newAPI(t)
 	mine := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
 	theirs := founded(t, a, "Bündnis Köln", "koeln")
-	theirTopic := raised(t, a, editor("Camille", "koeln"), theirs.ID, "Schwimmbad schließt")
-	myTopic := raised(t, a, editor("Dominique", "duesseldorf"), mine.ID, "Haushalt")
+	theirTopic := raised(t, a, editor("Camille", adminsOf("koeln")), theirs.ID, "Schwimmbad schließt")
+	myTopic := raised(t, a, editor("Dominique", adminsOf("duesseldorf")), mine.ID, "Haushalt")
 
 	in := &CreateActionInput{ID: mine.ID}
 	in.Body.Title, in.Body.Kind = "Demo", "demonstration"
 	in.Body.StartsAt = time.Now().Add(24 * time.Hour).Format(time.RFC3339)
 
 	in.Body.TopicID = theirTopic.ID
-	if _, err := a.staffCreateAction(editor("Dominique", "duesseldorf"), in); statusOf(err) != http.StatusUnprocessableEntity {
+	if _, err := a.staffCreateAction(editor("Dominique", adminsOf("duesseldorf")), in); statusOf(err) != http.StatusUnprocessableEntity {
 		t.Errorf("an action about another collective's topic: %v, want 422", err)
 	}
 
 	in.Body.TopicID = myTopic.ID
-	out, err := a.staffCreateAction(editor("Dominique", "duesseldorf"), in)
+	out, err := a.staffCreateAction(editor("Dominique", adminsOf("duesseldorf")), in)
 	if err != nil {
 		t.Fatalf("an action about its own collective's topic: %v", err)
 	}
@@ -548,7 +587,7 @@ func TestAnActionCanOnlyPointAtItsOwnCollectivesTopic(t *testing.T) {
 func TestWhatAnEditorWritesIsCheckedLikeAnybodysWriting(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 
 	valid := func() *CreateTopicInput {
 		in := &CreateTopicInput{ID: owner.ID}
@@ -602,10 +641,10 @@ func TestEveryWriteIsNamedInTheLog(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
 	other := founded(t, a, "Bündnis Köln", "koeln")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 
 	about := raised(t, a, me, owner.ID, "100 Millionen weniger")
-	raised(t, a, editor("Camille", "koeln"), other.ID, "Schwimmbad schließt")
+	raised(t, a, editor("Camille", adminsOf("koeln")), other.ID, "Schwimmbad schließt")
 	if _, err := a.staffDeleteTopic(me, &TopicIDInput{ID: about.ID}); err != nil {
 		t.Fatalf("staffDeleteTopic: %v", err)
 	}
@@ -659,7 +698,7 @@ func TestEveryWriteIsNamedInTheLog(t *testing.T) {
 func TestALogoIsAnImageAndNothingElse(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
-	me := editor("Dominique", "duesseldorf")
+	me := editor("Dominique", adminsOf("duesseldorf"))
 	png := []byte("\x89PNG\r\n\x1a\n not really a picture")
 
 	for name, in := range map[string]*LogoInput{
@@ -709,7 +748,7 @@ func TestALogoIsAnImageAndNothingElse(t *testing.T) {
 	}
 
 	// Another collective's editor cannot touch it.
-	if _, err := a.staffDeleteCollectiveLogo(editor("Camille", "koeln"),
+	if _, err := a.staffDeleteCollectiveLogo(editor("Camille", adminsOf("koeln")),
 		&CollectiveIDInput{ID: owner.ID}); statusOf(err) != http.StatusNotFound {
 		t.Errorf("another editor removing the logo: %v, want 404", err)
 	}
@@ -726,7 +765,7 @@ func TestALogoIsAnImageAndNothingElse(t *testing.T) {
 func TestTheMapCountsEverythingWhateverItDraws(t *testing.T) {
 	a := newAPI(t)
 	owner := founded(t, a, "Bündnis NRW", "nrw")
-	me := editor("Dominique", "nrw")
+	me := editor("Dominique", adminsOf("nrw"))
 
 	// One topic in Düsseldorf with a figure, one in Berlin with another.
 	duesseldorf := &CreateTopicInput{ID: owner.ID}

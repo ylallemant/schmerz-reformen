@@ -87,17 +87,33 @@ type staff struct {
 	Admin bool
 }
 
-// manages reports whether this editor may change a collective's content.
+// The roles, as checks. An administrator of the site holds every one of them.
 //
-// A collective with no group is managed by administrators alone. That is the
-// state it is created in, and it must not mean "by anybody": an empty string
-// matching an empty list is exactly the kind of accident this line is here to
+// A group that is empty never matches: a collective or organisation whose
+// groups were somehow left unnamed is an administrator's alone, and an empty
+// string matching an editor in no groups is exactly the accident these lines
 // rule out.
-func (s *staff) manages(collective models.Collective) bool {
-	if s.Admin {
-		return true
-	}
-	return collective.AuthGroup != "" && slices.Contains(s.Groups, collective.AuthGroup)
+
+// administers reports whether this editor is a collective's administrator:
+// its profile, its member organisations, its authors.
+func (s *staff) administers(collective models.Collective) bool {
+	return s.Admin || in(s.Groups, collective.AdminGroup)
+}
+
+// authors reports whether this editor may publish for a collective — its
+// topics, its news and its actions. Its administrators may too.
+func (s *staff) authors(collective models.Collective) bool {
+	return s.administers(collective) || in(s.Groups, collective.AuthorGroup)
+}
+
+// administersOrganisation reports whether this editor is an organisation's
+// administrator: its profile and its people.
+func (s *staff) administersOrganisation(organisation models.Organisation) bool {
+	return s.Admin || in(s.Groups, organisation.AdminGroup)
+}
+
+func in(groups []string, group string) bool {
+	return group != "" && slices.Contains(groups, group)
 }
 
 // authenticateStaff decides whether a request really comes from the console,

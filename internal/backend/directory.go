@@ -200,8 +200,10 @@ func (a *API) currentAdminGroup() string {
 	return a.adminGroup
 }
 
-// ensureDirectoryGroup makes sure a collective's group exists in the
-// directory, so an administrator can put people in it from the console.
+// ensureDirectoryGroup makes sure one of a collective's or an organisation's
+// groups exists in the directory, so people can be put in it from the
+// console. A group still missing then is created when somebody is first put
+// in it.
 //
 // Best effort: the collective is saved either way, and a group that could not
 // be created is one an operator can create by hand — so a failure is logged
@@ -213,6 +215,18 @@ func (a *API) ensureDirectoryGroup(ctx context.Context, name string) {
 	}
 	if _, err := client.EnsureGroup(ctx, name); err != nil {
 		log.Warn().Err(err).Str("group", name).
-			Msg("cannot create a collective's group in the directory; create it by hand")
+			Msg("cannot create a group in the directory; it is created when somebody is first given that role")
 	}
 }
+
+// appName is the provisioned application's name — the prefix of every group
+// this site gives meaning to — or the default before the wizard has run.
+func (a *API) appName() string {
+	if _, settings := a.directory.connected(); settings.AppName != "" {
+		return settings.AppName
+	}
+	return models.DefaultAppName
+}
+
+// usersGroup is the group of everybody who may sign in to the console.
+func (a *API) usersGroup() string { return models.UsersGroupName(a.appName()) }

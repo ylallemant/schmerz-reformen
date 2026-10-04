@@ -19,15 +19,32 @@
     {{ end }}
     <p>Editors now sign in through <code>{{ .Result.InstanceURL }}</code>, with the application
        <code>{{ .Result.AppName }}</code>. Its administrators are the group
-       <code>{{ .AdminGroup }}</code>; each collective's editors are the group named on the
-       collective.</p>
-    {{ if .Result.OwnToken }}
+       <code>{{ .AdminGroup }}</code>, and everybody who may use the console is in
+       <code>{{ .Result.AppName }}-users</code>. Each collective and each organisation is given
+       groups of its own when it is created, named after its address.</p>
+    {{ if .Result.ServiceAccount }}
+    <p><strong>The token you pasted is no longer needed and may expire.</strong> From now on the
+       backend works as the service account <code>{{ .Result.ServiceAccount }}</code>, which holds
+       only the permissions it needs — managing users and groups — through the role
+       <code>{{ .Result.ServiceAccount }}</code>. Its token, <code>{{ .Result.OwnToken }}</code>,
+       does not expire; find it in Authentik under <em>Directory → Tokens and App passwords</em>.
+       Revoking it stops every sign-in to the console, and nothing else.</p>
+    {{ else if .Result.OwnToken }}
     <p><strong>The token you pasted is no longer needed and may expire.</strong> The backend
        minted one of its own, <code>{{ .Result.OwnToken }}</code>, which does not expire — find
        it in Authentik under <em>Directory → Tokens and App passwords</em>. Revoking it stops
        every sign-in to the console, and nothing else.</p>
     {{ end }}
   </div>
+
+  {{ with .Result.ServiceAccountNote }}
+  <div class="notice warn">
+    <p><strong>The backend kept working with the token of the account that ran setup</strong>,
+       not with a service account of its own: {{ . }}</p>
+    <p class="hint">That account can do far more in your directory than this site needs. Run
+       setup again once this is fixed.</p>
+  </div>
+  {{ end }}
 
   {{ with .Result.Reconciled }}
   <div class="notice warn">
@@ -159,10 +176,12 @@
   </form>
 
   <div class="notice">
-    <p>What this creates in your directory: an OAuth2 provider, an application, the group
-       <code>{{ .AppName }}-admins</code>, a token for the backend, and — only if your Authentik
-       has none — a recovery flow, bound to the default brand only if the brand has none either.
-       A group for each collective is created when the collective names one.</p>
+    <p>What this creates in your directory: an OAuth2 provider, an application, the groups
+       <code>{{ .AppName }}-admins</code> and <code>{{ .AppName }}-users</code>, a service account
+       <code>{{ .AppName }}-service</code> with a role holding only what the backend needs and a
+       token of its own, and — only if your Authentik has none — a recovery flow, bound to the
+       default brand only if the brand has none either. Each collective and organisation gets
+       its own groups when it is created.</p>
     <p>Anything of these that already exists is reused and brought in line rather than
        duplicated, and the result page lists every correction. An existing account named as
        the first administrator is adopted as it is.</p>

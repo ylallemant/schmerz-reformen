@@ -146,9 +146,14 @@ func LoadOIDC() (OIDC, error) {
 		ConsoleURL:    strings.TrimRight(strings.TrimSpace(viper.GetString(KeyConsoleURL)), "/"),
 		Superuser:     viper.GetBool(KeySuperuser),
 	}
-	for _, group := range viper.GetStringSlice(KeyDevelopmentGroups) {
-		if group = strings.TrimSpace(group); group != "" {
-			o.DevelopmentGroups = append(o.DevelopmentGroups, group)
+	// Split on commas as well: the flag is a comma-separated list, while
+	// Viper splits the same setting from the environment on spaces only, and
+	// one setting must read the same whichever way it is given.
+	for _, entry := range viper.GetStringSlice(KeyDevelopmentGroups) {
+		for _, group := range strings.Split(entry, ",") {
+			if group = strings.TrimSpace(group); group != "" {
+				o.DevelopmentGroups = append(o.DevelopmentGroups, group)
+			}
 		}
 	}
 

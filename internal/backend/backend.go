@@ -78,8 +78,6 @@ func Definition() cli.Definition {
 			config.RegisterStaffFlags(cmd)
 			// What the identity provider's stored credentials are sealed with.
 			config.RegisterSecretFlags(cmd)
-			// How many editors must agree before an organisation changes.
-			config.RegisterCurationFlags(cmd)
 			config.RegisterNotificationFlags(cmd)
 		},
 		Setup: Setup,
@@ -156,10 +154,6 @@ type API struct {
 	// provisioned says the console's setup wizard has run. Once it has, an
 	// editor's groups come from the directory and never from the header.
 	provisioned atomic.Bool
-
-	// approvals is how many editors other than its author must approve a
-	// change to an organisation, and how many rejections close one.
-	approvals int
 
 	// development mirrors the --development flag: an editor's identity is
 	// believed without a token when none is configured.
@@ -269,13 +263,6 @@ func Setup(svc *service.Service, common config.Common) error {
 		log.Info().Msg("web push is off: notifications are written to the list and not delivered")
 	}
 
-	approvals, err := config.LoadOrganisationApprovals()
-	if err != nil {
-		return err
-	}
-	log.Info().Int("approvals", approvals).
-		Msg("a change to an organisation needs this many approvals from editors other than its author")
-
 	staffConfig := config.LoadStaff()
 	switch {
 	case staffConfig.Token != "":
@@ -306,7 +293,6 @@ func Setup(svc *service.Service, common config.Common) error {
 		staffToken:  staffConfig.Token,
 		adminGroup:  staffConfig.AdminGroup,
 		directory:   &directory{},
-		approvals:   approvals,
 		development: common.Development,
 	}
 
@@ -355,7 +341,7 @@ func (a *API) registerOperations(api huma.API) {
 
 	a.registerCollectiveRoutes(api)
 	a.registerOrganisationRoutes(api)
-	a.registerChangeRoutes(api)
+	a.registerEntryPeopleRoutes(api)
 	a.registerTopicRoutes(api)
 	a.registerUpdateRoutes(api)
 	a.registerActionRoutes(api)

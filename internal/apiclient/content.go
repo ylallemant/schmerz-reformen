@@ -55,8 +55,12 @@ type Collective struct {
 	Followers int64 `json:"followers"`
 	Following bool  `json:"following"`
 
-	// AuthGroup is filled on the console's routes only.
-	AuthGroup string `json:"auth_group,omitempty"`
+	// Filled on the console's routes only: the collective's two groups, and
+	// what the editor asking may do with it.
+	AdminGroup  string `json:"admin_group,omitempty"`
+	AuthorGroup string `json:"author_group,omitempty"`
+	Administers bool   `json:"administers,omitempty"`
+	Authors     bool   `json:"authors,omitempty"`
 }
 
 // TopicRef is a topic as something else names it.

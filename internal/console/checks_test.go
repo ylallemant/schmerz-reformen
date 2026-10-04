@@ -28,13 +28,12 @@ func TestTranslationsRespectTheLengthBudget(t *testing.T) {
 func TestEveryKeyTheConsoleAsksForIsDefined(t *testing.T) {
 	var enumerated []string
 	for prefix, values := range map[string][]string{
-		"status":        statuses,
-		"kind":          topicKinds,
-		"level":         levels,
-		"action_kind":   actionKinds,
-		"member_kind":   memberKinds,
-		"change_kind":   {"create", "update", "delete"},
-		"change_status": {"pending", "applied", "rejected", "withdrawn", "failed"},
+		"status":      statuses,
+		"kind":        topicKinds,
+		"level":       levels,
+		"action_kind": actionKinds,
+		"member_kind": memberKinds,
+		"role":        {"collective_admins", "collective_authors", "organisation_admins", "organisation_members"},
 	} {
 		for _, value := range values {
 			enumerated = append(enumerated, prefix+"."+value)
@@ -44,12 +43,13 @@ func TestEveryKeyTheConsoleAsksForIsDefined(t *testing.T) {
 		enumerated = append(enumerated, key)
 	}
 	// What the audit log may hold: every verb the backend writes and every
-	// kind of thing it writes one about.
+	// kind of thing it writes one about — and the verbs of the organisation
+	// proposals it no longer makes, which entries already written still name.
 	for _, verb := range []string{"create", "update", "delete", "publish", "archive", "cancel", "config_change",
 		"propose", "approve", "reject", "withdraw"} {
 		enumerated = append(enumerated, "audit.action."+verb)
 	}
-	for _, subject := range []string{"collective", "member", "organisation", "topic", "update", "action", "installation"} {
+	for _, subject := range []string{"collective", "member", "organisation", "topic", "update", "action", "installation", "role"} {
 		enumerated = append(enumerated, "audit.type."+subject)
 	}
 

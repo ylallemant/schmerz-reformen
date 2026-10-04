@@ -177,9 +177,14 @@ type CollectiveItem struct {
 	// used before keeps whatever the last answer was.
 	Following bool `json:"following"`
 
-	// AuthGroup is the identity-provider group that manages the collective.
-	// Filled on the console's routes only; a reader is never told it.
-	AuthGroup string `json:"auth_group,omitempty"`
+	// AdminGroup and AuthorGroup are the identity-provider groups of its
+	// administrators and authors, and Administers and Authors what the
+	// editor asking may do. Filled on the console's routes only; a reader is
+	// never told any of it.
+	AdminGroup  string `json:"admin_group,omitempty"`
+	AuthorGroup string `json:"author_group,omitempty"`
+	Administers bool   `json:"administers,omitempty"`
+	Authors     bool   `json:"authors,omitempty"`
 }
 
 func toCollectiveItem(c models.Collective) CollectiveItem {
@@ -291,13 +296,14 @@ func (a *API) getCollective(ctx context.Context, in *CollectiveSlugInput) (*Coll
 
 // --- the console ---
 
-// collectiveFor loads a collective and checks the editor may manage it.
+// collectiveFor loads a collective and checks the editor may publish for it:
+// its topics, its news, its actions — which its administrators may too.
 //
 // One function for every route that touches a collective's content, because
 // the check is the same and a route that did it slightly differently would be
-// the one that got it wrong. A collective somebody may not manage answers 404
-// rather than 403: an editor of one alliance has no business learning that
-// another exists in draft.
+// the one that got it wrong. A collective somebody holds no role in answers
+// 404 rather than 403: an editor of one alliance has no business learning
+// that another exists in draft.
 func (a *API) collectiveFor(ctx context.Context, id string) (*staff, models.Collective, error) {
 	who, err := mustStaff(ctx)
 	if err != nil {
@@ -305,7 +311,7 @@ func (a *API) collectiveFor(ctx context.Context, id string) (*staff, models.Coll
 	}
 
 	collective, err := a.store.Collective(ctx, id)
-	if errors.Is(err, store.ErrCollectiveNotFound) || (err == nil && !who.manages(collective)) {
+	if errors.Is(err, store.ErrCollectiveNotFound) || (err == nil && !who.authors(collective)) {
 		return nil, models.Collective{}, huma.Error404NotFound("no such collective")
 	}
 	if err != nil {
@@ -315,11 +321,29 @@ func (a *API) collectiveFor(ctx context.Context, id string) (*staff, models.Coll
 	return who, collective, nil
 }
 
-// staffCollectiveItem is a collective as an editor sees it: with the group
-// that manages it.
-func staffCollectiveItem(c models.Collective) CollectiveItem {
+// collectiveAdminFor is collectiveFor for what only the collective's
+// administrators may do: its profile, its logo, its member organisations, its
+// authors. An author is told plainly; somebody with no role at all still gets
+// 404.
+func (a *API) collectiveAdminFor(ctx context.Context, id string) (*staff, models.Collective, error) {
+	who, collective, err := a.collectiveFor(ctx, id)
+	if err != nil {
+		return nil, models.Collective{}, err
+	}
+	if !who.administers(collective) {
+		return nil, models.Collective{}, huma.Error403Forbidden("only the collective's administrators may do that")
+	}
+	return who, collective, nil
+}
+
+// staffCollectiveItem is a collective as an editor sees it: with its groups,
+// and what they may do with it.
+func staffCollectiveItem(c models.Collective, who *staff) CollectiveItem {
 	item := toCollectiveItem(c)
-	item.AuthGroup = c.AuthGroup
+	item.AdminGroup, item.AuthorGroup = c.AdminGroup, c.AuthorGroup
+	if who != nil {
+		item.Administers, item.Authors = who.administers(c), who.authors(c)
+	}
 	return item
 }
 
@@ -332,8 +356,8 @@ func (a *API) staffListCollectives(ctx context.Context, _ *struct{}) (*Collectiv
 	query := store.CollectiveQuery{}
 	if !who.Admin {
 		// Never nil for somebody who is not an administrator: a nil list
-		// means "no restriction", and an editor in no group manages nothing.
-		query.AuthGroups = append([]string{}, who.Groups...)
+		// means "no restriction", and an editor in no group has nothing.
+		query.Groups = append([]string{}, who.Groups...)
 	}
 
 	collectives, total, err := a.store.ListCollectives(ctx, query)
@@ -346,7 +370,7 @@ func (a *API) staffListCollectives(ctx context.Context, _ *struct{}) (*Collectiv
 	out.Body.Total = total
 	out.Body.Collectives = make([]CollectiveItem, 0, len(collectives))
 	for _, collective := range collectives {
-		out.Body.Collectives = append(out.Body.Collectives, staffCollectiveItem(collective))
+		out.Body.Collectives = append(out.Body.Collectives, staffCollectiveItem(collective, who))
 	}
 	return out, nil
 }
@@ -357,11 +381,11 @@ type CollectiveIDInput struct {
 }
 
 func (a *API) staffGetCollective(ctx context.Context, in *CollectiveIDInput) (*CollectiveOutput, error) {
-	_, collective, err := a.collectiveFor(ctx, in.ID)
+	who, collective, err := a.collectiveFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
-	out := &CollectiveOutput{Body: staffCollectiveItem(collective)}
+	out := &CollectiveOutput{Body: staffCollectiveItem(collective, who)}
 	out.Body.Followers, _ = a.followState(ctx, models.FollowCollective, collective.ID)
 	return out, nil
 }
@@ -374,7 +398,6 @@ type CollectiveFields struct {
 	Description string `json:"description,omitempty"`
 	Website     string `json:"website,omitempty"`
 	Contact     string `json:"contact,omitempty" doc:"an email or web address the collective publishes to be reached at"`
-	AuthGroup   string `json:"auth_group,omitempty" doc:"the identity-provider group whose members manage this collective"`
 	Status      string `json:"status,omitempty" doc:"draft, published or archived"`
 
 	PlaceInput
@@ -387,10 +410,10 @@ type CreateCollectiveInput struct {
 
 // applyCollectiveFields validates a form and writes it onto a collective.
 //
-// privileged says whether the caller may change the address and the managing
-// group. For anybody else those two fields are ignored rather than refused: a
-// form posts every field it has, and an editor saving a description must not
-// be told off for a slug they did not touch.
+// privileged says whether the caller may change the address. For anybody
+// else it is ignored rather than refused: a form posts every field it has, and
+// an editor saving a description must not be told off for a slug they did not
+// touch.
 func (a *API) applyCollectiveFields(ctx context.Context, collective *models.Collective, fields CollectiveFields, privileged bool) error {
 	name, err := cleanLine("the name", fields.Name, maxNameRunes)
 	if err != nil {
@@ -445,12 +468,6 @@ func (a *API) applyCollectiveFields(ctx context.Context, collective *models.Coll
 			return huma.Error422UnprocessableEntity("the address is too long")
 		}
 		collective.Slug = slug
-
-		group, err := cleanLine("the group", fields.AuthGroup, maxGroupRunes)
-		if err != nil {
-			return err
-		}
-		collective.AuthGroup = group
 	}
 
 	collective.Name = name
@@ -474,6 +491,8 @@ func (a *API) staffCreateCollective(ctx context.Context, in *CreateCollectiveInp
 		return nil, err
 	}
 
+	// Its groups, named now from its slug and kept: see models.CollectiveGroups.
+	collective.AdminGroup, collective.AuthorGroup = models.CollectiveGroups(a.appName(), collective.Slug)
 	err = a.store.CreateCollective(ctx, collective)
 	if errors.Is(err, store.ErrSlugTaken) {
 		return nil, huma.Error409Conflict("another collective already answers at that address")
@@ -484,12 +503,13 @@ func (a *API) staffCreateCollective(ctx context.Context, in *CreateCollectiveInp
 	}
 
 	a.audit(ctx, who, models.AuditCreate, "collective", collective.ID, collective.ID, collective.Name)
-	// Its editors' group, in the directory, so people can be put in it from
-	// the console rather than by hand in Authentik.
-	a.ensureDirectoryGroup(ctx, collective.AuthGroup)
+	// Its groups, in the directory, so people can be put in them from the
+	// console rather than by hand in Authentik.
+	a.ensureDirectoryGroup(ctx, collective.AdminGroup)
+	a.ensureDirectoryGroup(ctx, collective.AuthorGroup)
 	log.Info().Str("collective", collective.ID).Str("slug", collective.Slug).
-		Str("group", collective.AuthGroup).Msg("collective created")
-	return &CollectiveOutput{Body: staffCollectiveItem(*collective)}, nil
+		Str("admins", collective.AdminGroup).Str("authors", collective.AuthorGroup).Msg("collective created")
+	return &CollectiveOutput{Body: staffCollectiveItem(*collective, who)}, nil
 }
 
 // SaveCollectiveInput changes a collective.
@@ -499,7 +519,7 @@ type SaveCollectiveInput struct {
 }
 
 func (a *API) staffSaveCollective(ctx context.Context, in *SaveCollectiveInput) (*CollectiveOutput, error) {
-	who, collective, err := a.collectiveFor(ctx, in.ID)
+	who, collective, err := a.collectiveAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -520,12 +540,7 @@ func (a *API) staffSaveCollective(ctx context.Context, in *SaveCollectiveInput) 
 
 	a.audit(ctx, who, statusAction(before, collective.Status), "collective",
 		collective.ID, collective.ID, collective.Name)
-	if who.Admin {
-		// Only an administrator can change the group, so only their saves
-		// can have named a new one.
-		a.ensureDirectoryGroup(ctx, collective.AuthGroup)
-	}
-	return &CollectiveOutput{Body: staffCollectiveItem(collective)}, nil
+	return &CollectiveOutput{Body: staffCollectiveItem(collective, who)}, nil
 }
 
 // statusAction names a save for the audit log: by what it did to the status

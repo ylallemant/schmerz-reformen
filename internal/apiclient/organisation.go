@@ -5,16 +5,13 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 )
 
-// Organisations are shared by every collective that lists them, and changed
-// only by agreement: creating, changing and deleting one are proposals, which
-// the backend carries out once enough other editors approve them. Every call
-// here is the console's.
+// Organisations are shared by every collective that lists them. The site's
+// administrators create and delete them; each one's own administrators edit
+// it and choose its people. Every call here is the console's.
 
-// OrganisationValues is what an organisation says — the organisation's own,
-// or one side of a change.
+// OrganisationValues is what an organisation says.
 type OrganisationValues struct {
 	Name       string  `json:"name"`
 	Kind       string  `json:"kind"`
@@ -29,65 +26,17 @@ type OrganisationValues struct {
 
 // Organisation is one organisation.
 type Organisation struct {
-	ID string `json:"id"`
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
 	OrganisationValues
 
-	// Collectives and Pending are filled when one organisation is read.
+	// Its groups, and whether the editor asking administers it.
+	AdminGroup  string `json:"admin_group,omitempty"`
+	MemberGroup string `json:"member_group,omitempty"`
+	Administers bool   `json:"administers"`
+
+	// Collectives is filled when one organisation is read.
 	Collectives []CollectiveRef `json:"collectives,omitempty"`
-	Pending     []Change        `json:"pending,omitempty"`
-}
-
-// Vote is one editor's vote on a change.
-type Vote struct {
-	VoterName string    `json:"voter_name,omitempty"`
-	Approve   bool      `json:"approve"`
-	Comment   string    `json:"comment,omitempty"`
-	At        time.Time `json:"at"`
-}
-
-// Change is a proposed creation, change or deletion of an organisation, as
-// the signed-in editor sees it.
-type Change struct {
-	ID             string   `json:"id"`
-	OrganisationID string   `json:"organisation_id"`
-	Kind           string   `json:"kind"`
-	Status         string   `json:"status"`
-	Fields         []string `json:"fields,omitempty"`
-
-	Before OrganisationValues `json:"before"`
-	After  OrganisationValues `json:"after"`
-
-	AuthorName string `json:"author_name,omitempty"`
-	Mine       bool   `json:"mine"`
-	MyVote     string `json:"my_vote,omitempty"`
-	CanVote    bool   `json:"can_vote"`
-
-	Votes      []Vote `json:"votes"`
-	Approvals  int    `json:"approvals"`
-	Rejections int    `json:"rejections"`
-	Needed     int    `json:"needed"`
-
-	Reason    string     `json:"reason,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
-	DecidedAt *time.Time `json:"decided_at,omitempty"`
-}
-
-// Name is what the change is about: the name it gives, or the one it had.
-func (c Change) Name() string {
-	if c.After.Name != "" {
-		return c.After.Name
-	}
-	return c.Before.Name
-}
-
-// Sets reports whether the change sets a field.
-func (c Change) Sets(field string) bool {
-	for _, set := range c.Fields {
-		if set == field {
-			return true
-		}
-	}
-	return false
 }
 
 // OrganisationFields is an organisation as an editor's form sends it.
@@ -109,85 +58,90 @@ func (c *Client) Organisations(ctx context.Context) ([]Organisation, error) {
 	return answer.Organisations, err
 }
 
-// Organisation returns one organisation, with where it is a member and what
-// is waiting to change it.
+// Organisation returns one organisation, with where it is a member.
 func (c *Client) Organisation(ctx context.Context, id string) (Organisation, error) {
 	var organisation Organisation
 	err := c.get(ctx, "/v1/staff/organisations/"+url.PathEscape(id), &organisation)
 	return organisation, err
 }
 
-// ProposeOrganisation proposes a new organisation.
-func (c *Client) ProposeOrganisation(ctx context.Context, fields OrganisationFields) (Change, error) {
-	var change Change
-	err := c.write(ctx, http.MethodPost, "/v1/staff/organisations", fields, &change)
-	return change, err
+// CreateOrganisation creates one. The site's administrators only.
+func (c *Client) CreateOrganisation(ctx context.Context, fields OrganisationFields) (Organisation, error) {
+	var organisation Organisation
+	err := c.write(ctx, http.MethodPost, "/v1/staff/organisations", fields, &organisation)
+	return organisation, err
 }
 
-// ProposeOrganisationUpdate proposes a change to an organisation.
-func (c *Client) ProposeOrganisationUpdate(ctx context.Context, id string, fields OrganisationFields) (Change, error) {
-	var change Change
-	err := c.write(ctx, http.MethodPut, "/v1/staff/organisations/"+url.PathEscape(id), fields, &change)
-	return change, err
+// SaveOrganisation changes one. Its administrators, and the site's.
+func (c *Client) SaveOrganisation(ctx context.Context, id string, fields OrganisationFields) (Organisation, error) {
+	var organisation Organisation
+	err := c.write(ctx, http.MethodPut, "/v1/staff/organisations/"+url.PathEscape(id), fields, &organisation)
+	return organisation, err
 }
 
-// ProposeOrganisationDeletion proposes deleting an organisation.
-func (c *Client) ProposeOrganisationDeletion(ctx context.Context, id string) (Change, error) {
-	var change Change
-	err := c.write(ctx, http.MethodPost, "/v1/staff/organisations/"+url.PathEscape(id)+"/deletion", struct{}{}, &change)
-	return change, err
+// DeleteOrganisation deletes one nothing uses. The site's administrators only.
+func (c *Client) DeleteOrganisation(ctx context.Context, id string) error {
+	return c.send(ctx, http.MethodDelete, "/v1/staff/organisations/"+url.PathEscape(id), "", nil)
 }
 
-// ProposeOrganisationLogo proposes a new logo.
-func (c *Client) ProposeOrganisationLogo(ctx context.Context, id, contentType string, data []byte) error {
-	return c.send(ctx, http.MethodPut,
-		"/v1/staff/organisations/"+url.PathEscape(id)+"/logo", contentType, data)
+// UploadOrganisationLogo replaces its logo.
+func (c *Client) UploadOrganisationLogo(ctx context.Context, id, contentType string, data []byte) error {
+	return c.send(ctx, http.MethodPut, "/v1/staff/organisations/"+url.PathEscape(id)+"/logo", contentType, data)
 }
 
-// ProposeOrganisationLogoRemoval proposes removing the logo.
-func (c *Client) ProposeOrganisationLogoRemoval(ctx context.Context, id string) error {
+// DeleteOrganisationLogo removes it.
+func (c *Client) DeleteOrganisationLogo(ctx context.Context, id string) error {
 	return c.send(ctx, http.MethodDelete, "/v1/staff/organisations/"+url.PathEscape(id)+"/logo", "", nil)
 }
 
-// Changes lists changes, newest first: status is "pending", "decided" or
-// "all", and organisationID narrows it to one organisation when set.
-func (c *Client) Changes(ctx context.Context, status, organisationID string, limit int) ([]Change, int64, error) {
-	query := url.Values{}
-	if status != "" {
-		query.Set("status", status)
-	}
-	if organisationID != "" {
-		query.Set("organisation", organisationID)
-	}
-	if limit > 0 {
-		query.Set("limit", strconv.Itoa(limit))
-	}
+// User is a console user, to choose from.
+type User struct {
+	PK       int    `json:"pk"`
+	Username string `json:"username"`
+	Name     string `json:"name,omitempty"`
+}
+
+// Users lists the console's users, for whoever gives roles.
+func (c *Client) Users(ctx context.Context) ([]User, error) {
 	var answer struct {
-		Changes []Change `json:"changes"`
-		Total   int64    `json:"total"`
+		Users []User `json:"users"`
 	}
-	err := c.get(ctx, "/v1/staff/changes?"+query.Encode(), &answer)
-	return answer.Changes, answer.Total, err
+	err := c.get(ctx, "/v1/staff/users", &answer)
+	return answer.Users, err
 }
 
-// Change returns one change with its votes.
-func (c *Client) Change(ctx context.Context, id string) (Change, error) {
-	var change Change
-	err := c.get(ctx, "/v1/staff/changes/"+url.PathEscape(id), &change)
-	return change, err
+// EntryPeople is who holds the two roles on a collective or an organisation:
+// its administrators, and its authors or members.
+type EntryPeople struct {
+	Admins []User `json:"admins"`
+	Others []User `json:"others"`
+
+	// MayGrantAdmins says the editor asking may change the administrators.
+	MayGrantAdmins bool `json:"may_grant_admins"`
 }
 
-// VoteOnChange approves or rejects a change.
-func (c *Client) VoteOnChange(ctx context.Context, id string, approve bool, comment string) (Change, error) {
-	var change Change
-	err := c.write(ctx, http.MethodPost, "/v1/staff/changes/"+url.PathEscape(id)+"/votes",
-		map[string]any{"approve": approve, "comment": comment}, &change)
-	return change, err
+// CollectivePeople reads who administers a collective and who writes for it.
+func (c *Client) CollectivePeople(ctx context.Context, id string) (EntryPeople, error) {
+	var people EntryPeople
+	err := c.get(ctx, "/v1/staff/collectives/"+url.PathEscape(id)+"/people", &people)
+	return people, err
 }
 
-// WithdrawChange takes back a change the editor proposed.
-func (c *Client) WithdrawChange(ctx context.Context, id string) (Change, error) {
-	var change Change
-	err := c.write(ctx, http.MethodPost, "/v1/staff/changes/"+url.PathEscape(id)+"/withdrawal", struct{}{}, &change)
-	return change, err
+// OrganisationPeople reads who administers an organisation, and its people.
+func (c *Client) OrganisationPeople(ctx context.Context, id string) (EntryPeople, error) {
+	var people EntryPeople
+	err := c.get(ctx, "/v1/staff/organisations/"+url.PathEscape(id)+"/people", &people)
+	return people, err
+}
+
+// SetEntryRole gives or takes a role on an entry: kind is "collectives" or
+// "organisations", role "admins", "authors" or "members".
+func (c *Client) SetEntryRole(ctx context.Context, kind, id, role string, pk int, username string, give bool) error {
+	method := http.MethodPut
+	if !give {
+		method = http.MethodDelete
+	}
+	path := "/v1/staff/" + kind + "/" + url.PathEscape(id) + "/people/" + url.PathEscape(role) + "/" +
+		strconv.Itoa(pk) + "?username=" + url.QueryEscape(username)
+	return c.send(ctx, method, path, "", nil)
 }

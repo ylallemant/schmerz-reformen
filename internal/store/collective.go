@@ -33,6 +33,12 @@ func (s *Store) CreateCollective(ctx context.Context, collective *models.Collect
 	if collective.Slug == "" {
 		return ErrSlugTaken
 	}
+	// Its groups are named from its slug now, once — the caller names them
+	// with the provisioned application's prefix; a caller that did not gets
+	// the default one.
+	if collective.AdminGroup == "" || collective.AuthorGroup == "" {
+		collective.AdminGroup, collective.AuthorGroup = models.CollectiveGroups(models.DefaultAppName, collective.Slug)
+	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var taken int64
@@ -70,7 +76,9 @@ func (s *Store) SaveCollective(ctx context.Context, collective *models.Collectiv
 		if taken > 0 {
 			return ErrSlugTaken
 		}
-		return tx.Omit("Members").Save(collective).Error
+		// The groups were fixed when it was created; a changed slug does not
+		// rename them, or the people in them would lose their roles.
+		return tx.Omit("Members", "AdminGroup", "AuthorGroup").Save(collective).Error
 	})
 }
 
@@ -104,11 +112,11 @@ type CollectiveQuery struct {
 	// Statuses limits the listing; empty means every status.
 	Statuses []models.PublishStatus
 
-	// AuthGroups limits the listing to collectives managed by one of these
-	// identity-provider groups. Nil means no such limit; an empty non-nil
-	// slice means none at all — an editor in no group manages nothing, and
-	// reading "no groups" as "no filter" would hand them everything.
-	AuthGroups []string
+	// Groups limits the listing to collectives one of these identity-provider
+	// groups administers or writes for. Nil means no such limit; an empty
+	// non-nil slice means none at all — an editor in no group has nothing,
+	// and reading "no groups" as "no filter" would hand them everything.
+	Groups []string
 
 	// Bounds limits the listing to a map viewport. Nil means everywhere.
 	Bounds *geo.Box
@@ -119,7 +127,7 @@ type CollectiveQuery struct {
 // ListCollectives returns collectives by name, with the number matching the
 // query before the page was cut.
 func (s *Store) ListCollectives(ctx context.Context, query CollectiveQuery) ([]models.Collective, int64, error) {
-	if query.AuthGroups != nil && len(query.AuthGroups) == 0 {
+	if query.Groups != nil && len(query.Groups) == 0 {
 		return nil, 0, nil
 	}
 	page := query.Page.clamp(200, 500)
@@ -128,8 +136,8 @@ func (s *Store) ListCollectives(ctx context.Context, query CollectiveQuery) ([]m
 	if len(query.Statuses) > 0 {
 		db = db.Where("status IN ?", query.Statuses)
 	}
-	if query.AuthGroups != nil {
-		db = db.Where("auth_group IN ?", query.AuthGroups)
+	if query.Groups != nil {
+		db = db.Where("admin_group IN ? OR author_group IN ?", query.Groups, query.Groups)
 	}
 
 	// Counted before the viewport narrows it: see ListTopics for why a map

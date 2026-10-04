@@ -59,11 +59,17 @@ func newSetupBackend(t *testing.T) *setupBackend {
 			w.Write([]byte(`{"detail":"the token was refused: authentik refused this console's API token"}`)) //nolint:errcheck
 			return
 		}
-		json.NewEncoder(w).Encode(apiclient.Provisioning{ //nolint:errcheck
+		result := apiclient.Provisioning{
 			Done: true, AdminUsername: request.AdminUsername, TokenOwner: "akadmin",
 			InstanceURL: request.InstanceURL, AppName: request.AppName, RecoveryReady: true,
-			OwnToken: "schmerz-console", AdminLink: "https://auth.example/if/flow/recovery/?token=first",
-		})
+			OwnToken: "schmerz-service-api", AdminLink: "https://auth.example/if/flow/recovery/?token=first",
+			ServiceAccount: "schmerz-service",
+		}
+		if request.AdminUsername == "on-an-old-authentik" {
+			result.OwnToken, result.ServiceAccount = "", ""
+			result.ServiceAccountNote = "this Authentik has no permission authentik_core.reset_user_password"
+		}
+		json.NewEncoder(w).Encode(result) //nolint:errcheck
 	})
 	b.server = httptest.NewServer(mux)
 	t.Cleanup(b.server.Close)
@@ -158,8 +164,8 @@ func TestProvisioningIsTheBackendsAndTheDoorClosesBehindIt(t *testing.T) {
 	}
 	body := recorder.Body.String()
 	if !strings.Contains(body, "https://auth.example/if/flow/recovery/?token=first") ||
-		!strings.Contains(body, "schmerz-console") {
-		t.Error("the first admin's way in, or the token the backend kept, is not shown")
+		!strings.Contains(body, "schmerz-service-api") || !strings.Contains(body, "the service account <code>schmerz-service</code>") {
+		t.Error("the first admin's way in, or the account and token the backend works with, is not shown")
 	}
 	if strings.Contains(body, "pasted-setup-token") {
 		t.Error("the pasted token was rendered back")
@@ -170,6 +176,25 @@ func TestProvisioningIsTheBackendsAndTheDoorClosesBehindIt(t *testing.T) {
 	c.wizard(again, httptest.NewRequest(http.MethodGet, SetupPath, nil))
 	if again.Code != http.StatusNotFound {
 		t.Errorf("the wizard after finishing = %d, want 404", again.Code)
+	}
+}
+
+// TestAMissingServiceAccountIsSaid: a backend still working with the token
+// of whoever ran setup holds far more than it needs, and the operator has to
+// know that to do anything about it.
+func TestAMissingServiceAccountIsSaid(t *testing.T) {
+	c := setupConsole(t, newSetupBackend(t).server.URL, SetupDoor{Open: true})
+	form := url.Values{"instance_url": {"https://auth.example.org"}, "token": {"pasted"},
+		"app_name": {"schmerz"}, "admin_username": {"on-an-old-authentik"}}
+	request := httptest.NewRequest(http.MethodPost, SetupPath, strings.NewReader(form.Encode()))
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	recorder := httptest.NewRecorder()
+	c.wizard(recorder, request)
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "kept working with the token of the account that ran setup") ||
+		!strings.Contains(body, "authentik_core.reset_user_password") {
+		t.Errorf("the page does not say the backend kept the operator's token\n%s", body)
 	}
 }
 

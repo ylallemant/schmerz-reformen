@@ -236,7 +236,7 @@ func (c *console) refreshed(w http.ResponseWriter, r *http.Request, identity sta
 // keep replaying it would not be a session.
 func (c *console) identityOf(r *http.Request) (staffauth.Identity, bool) {
 	if c.development {
-		return c.standIn(r), true
+		return c.developmentIdentity, true
 	}
 
 	session, ok := c.sessionOf(r)

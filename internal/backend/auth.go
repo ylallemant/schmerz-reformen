@@ -187,6 +187,11 @@ type ProvisionItem struct {
 
 	// Reconciled is what already existed and was brought back in line.
 	Reconciled []string `json:"reconciled,omitempty"`
+
+	// ServiceAccount is the account the backend works as from now on, or
+	// ServiceAccountNote why it kept the operator's token.
+	ServiceAccount     string `json:"service_account,omitempty"`
+	ServiceAccountNote string `json:"service_account_note,omitempty"`
 }
 
 // ProvisionOutput is the outcome.
@@ -232,6 +237,7 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 		TokenOwner: result.TokenOwner, InstanceURL: result.InstanceURL, AppName: result.AppName,
 		RecoveryReady: result.RecoveryReady, OwnToken: result.ConsoleToken.Identifier,
 		AdminLink: result.AdminLink, Reconciled: result.Reconciled,
+		ServiceAccount: result.ServiceAccount, ServiceAccountNote: result.ServiceAccountNote,
 	}}
 	if err != nil {
 		// Authentik's own words where there are any: "slug: this field must be
@@ -254,12 +260,12 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 	}
 	a.useDirectory(result.Settings)
 
-	// Every collective that already names a group gets it in the new
-	// directory, so its editors can be added from the console straight away.
-	collectives, _, err := a.store.ListCollectives(ctx, store.CollectiveQuery{Page: store.Page{Limit: 500}})
-	if err == nil {
-		for _, collective := range collectives {
-			a.ensureDirectoryGroup(ctx, collective.AuthGroup)
+	// Every group this site gives meaning to, in the new directory: the
+	// users', and each collective's and organisation's — so people can be put
+	// in them from the console straight away.
+	if groups, err := a.siteGroups(ctx); err == nil {
+		for _, name := range groups.names() {
+			a.ensureDirectoryGroup(ctx, name)
 		}
 	}
 

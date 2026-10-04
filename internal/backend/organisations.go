@@ -9,14 +9,15 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/rs/zerolog/log"
 
+	"github.com/ylallemant/schmerz-reformen/internal/cache"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
 )
 
-// Organisations are shared by every collective that lists them, so nobody
-// changes one alone: creating, changing and deleting one are proposals, and a
-// proposal is carried out once enough editors other than its author approve it
-// (changes.go). Reading them is every editor's, because choosing a member is.
+// Organisations are shared by every collective that lists them. The site's
+// administrators create and delete them; each organisation's own
+// administrators — the people in its AdminGroup — edit it. Reading them is
+// every console user's, because choosing a member is.
 
 func (a *API) registerOrganisationRoutes(api huma.API) {
 	huma.Register(api, staffOnly(huma.Operation{
@@ -25,8 +26,7 @@ func (a *API) registerOrganisationRoutes(api huma.API) {
 		Path:        "/v1/staff/organisations",
 		Summary:     "List every organisation",
 		Description: "By name, with the place and the parent of each — what the console's " +
-			"picker searches as an editor types. Only organisations that exist: one whose " +
-			"creation is still waiting for approval is a change, not an organisation.",
+			"picker searches as somebody types.",
 		Tags: []string{"Organisations"},
 	}), a.staffListOrganisations)
 
@@ -36,61 +36,61 @@ func (a *API) registerOrganisationRoutes(api huma.API) {
 		Path:        "/v1/staff/organisations/{id}",
 		Summary:     "Read one organisation",
 		Description: "With the collectives it is a member of — those this editor may see — " +
-			"and the changes to it that are waiting for approval.",
+			"and whether the editor administers it.",
 		Tags: []string{"Organisations"},
 	}), a.staffGetOrganisation)
 
-	huma.Register(api, staffOnly(huma.Operation{
-		OperationID: "staff-propose-organisation",
+	// Nothing cached names an organisation nobody lists yet.
+	huma.Register(api, adminOnly(huma.Operation{
+		OperationID: "staff-create-organisation",
 		Method:      http.MethodPost,
 		Path:        "/v1/staff/organisations",
-		Summary:     "Propose a new organisation",
-		Description: "Answers with the change, not an organisation: it exists once enough " +
-			"other editors approve it.",
+		Summary:     "Create an organisation",
+		Description: "Administrators only. Its slug and its two groups — administrators and " +
+			"members — are fixed now.",
 		Tags: []string{"Organisations"},
-	}), a.staffProposeOrganisation)
+	}), a.staffCreateOrganisation)
 
-	huma.Register(api, staffOnly(huma.Operation{
-		OperationID: "staff-propose-organisation-update",
+	// An organisation appears in the member list of every collective that has
+	// it, so every change to it is a change to those pages.
+	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
+		OperationID: "staff-save-organisation",
 		Method:      http.MethodPut,
 		Path:        "/v1/staff/organisations/{id}",
-		Summary:     "Propose a change to an organisation",
-		Description: "Send the whole form; the change carries only the fields that differ, " +
-			"and the organisation stays as it is until the change is approved.",
-		Tags: []string{"Organisations"},
-	}), a.staffProposeOrganisationUpdate)
+		Summary:     "Change an organisation",
+		Description: "Its administrators, and the site's.",
+		Tags:        []string{"Organisations"},
+	})), a.staffSaveOrganisation)
 
-	huma.Register(api, staffOnly(huma.Operation{
-		OperationID: "staff-propose-organisation-deletion",
-		Method:      http.MethodPost,
-		Path:        "/v1/staff/organisations/{id}/deletion",
-		Summary:     "Propose deleting an organisation",
-		Description: "Refused while it is a member of a collective or the parent of another: " +
-			"those are taken out first, where the collectives' editors see it happen.",
+	huma.Register(api, invalidates(cache.Collectives)(adminOnly(huma.Operation{
+		OperationID: "staff-delete-organisation",
+		Method:      http.MethodDelete,
+		Path:        "/v1/staff/organisations/{id}",
+		Summary:     "Delete an organisation",
+		Description: "Administrators only. Refused while it is a member of a collective or the " +
+			"parent of another: those are taken out first, where the collectives' editors see it.",
 		Tags: []string{"Organisations"},
-	}), a.staffProposeOrganisationDeletion)
+	})), a.staffDeleteOrganisation)
 
-	huma.Register(api, staffOnly(huma.Operation{
-		OperationID: "staff-propose-organisation-logo",
+	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
+		OperationID: "staff-put-organisation-logo",
 		Method:      http.MethodPut,
 		Path:        "/v1/staff/organisations/{id}/logo",
-		Summary:     "Propose a new logo for an organisation",
-		Description: "The image is the request body and its type the Content-Type header. " +
-			"It is stored now and becomes the logo if the change is approved.",
-		Tags: []string{"Organisations"},
-	}), a.staffProposeOrganisationLogo)
+		Summary:     "Upload an organisation's logo",
+		Description: "The image is the request body and its type the Content-Type header.",
+		Tags:        []string{"Organisations"},
+	})), a.staffPutOrganisationLogo)
 
-	huma.Register(api, staffOnly(huma.Operation{
-		OperationID: "staff-propose-organisation-logo-removal",
+	huma.Register(api, invalidates(cache.Collectives)(staffOnly(huma.Operation{
+		OperationID: "staff-delete-organisation-logo",
 		Method:      http.MethodDelete,
 		Path:        "/v1/staff/organisations/{id}/logo",
-		Summary:     "Propose removing an organisation's logo",
+		Summary:     "Remove an organisation's logo",
 		Tags:        []string{"Organisations"},
-	}), a.staffProposeOrganisationLogoRemoval)
+	})), a.staffDeleteOrganisationLogo)
 }
 
-// OrganisationValuesItem is what an organisation says, on the wire — the
-// organisation's own, or one side of a change.
+// OrganisationValuesItem is what an organisation says, on the wire.
 type OrganisationValuesItem struct {
 	Name       string  `json:"name"`
 	Kind       string  `json:"kind"`
@@ -105,15 +105,21 @@ type OrganisationValuesItem struct {
 
 // OrganisationItem is an organisation on the wire.
 type OrganisationItem struct {
-	ID string `json:"id"`
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
 	OrganisationValuesItem
 
-	// Collectives and Pending are filled when one organisation is read.
+	// AdminGroup and MemberGroup are its groups, and Administers whether the
+	// editor asking is one of its administrators.
+	AdminGroup  string `json:"admin_group,omitempty"`
+	MemberGroup string `json:"member_group,omitempty"`
+	Administers bool   `json:"administers"`
+
+	// Collectives is filled when one organisation is read.
 	Collectives []CollectiveRef `json:"collectives,omitempty"`
-	Pending     []ChangeItem    `json:"pending,omitempty"`
 }
 
-// toValuesItem renders one set of values, naming the parent from parents.
+// toValuesItem renders an organisation's values, naming the parent from parents.
 func toValuesItem(values models.OrganisationValues, parents map[string]models.Organisation) OrganisationValuesItem {
 	item := OrganisationValuesItem{
 		Name: values.Name, Kind: string(values.Kind), Website: values.Website,
@@ -124,6 +130,18 @@ func toValuesItem(values models.OrganisationValues, parents map[string]models.Or
 	}
 	if values.Location.Placed() {
 		item.Latitude, item.Longitude = values.Location.Latitude, values.Location.Longitude
+	}
+	return item
+}
+
+func toOrganisationItem(organisation models.Organisation, parents map[string]models.Organisation, who *staff) OrganisationItem {
+	item := OrganisationItem{
+		ID: organisation.ID, Slug: organisation.Slug,
+		OrganisationValuesItem: toValuesItem(organisation.OrganisationValues, parents),
+		AdminGroup:             organisation.AdminGroup, MemberGroup: organisation.MemberGroup,
+	}
+	if who != nil {
+		item.Administers = who.administersOrganisation(organisation)
 	}
 	return item
 }
@@ -154,7 +172,8 @@ type OrganisationsOutput struct {
 }
 
 func (a *API) staffListOrganisations(ctx context.Context, _ *struct{}) (*OrganisationsOutput, error) {
-	if _, err := mustStaff(ctx); err != nil {
+	who, err := mustStaff(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -176,10 +195,7 @@ func (a *API) staffListOrganisations(ctx context.Context, _ *struct{}) (*Organis
 	out.Body.Total = total
 	out.Body.Organisations = make([]OrganisationItem, 0, len(organisations))
 	for _, organisation := range organisations {
-		out.Body.Organisations = append(out.Body.Organisations, OrganisationItem{
-			ID:                     organisation.ID,
-			OrganisationValuesItem: toValuesItem(organisation.OrganisationValues, byID),
-		})
+		out.Body.Organisations = append(out.Body.Organisations, toOrganisationItem(organisation, byID, who))
 	}
 	return out, nil
 }
@@ -211,16 +227,27 @@ func (a *API) organisationFor(ctx context.Context, id string) (*staff, models.Or
 	return who, organisation, nil
 }
 
+// organisationAdminFor is organisationFor for what only its administrators —
+// and the site's — may do.
+func (a *API) organisationAdminFor(ctx context.Context, id string) (*staff, models.Organisation, error) {
+	who, organisation, err := a.organisationFor(ctx, id)
+	if err != nil {
+		return nil, models.Organisation{}, err
+	}
+	if !who.administersOrganisation(organisation) {
+		return nil, models.Organisation{}, huma.Error403Forbidden("only the organisation's administrators may do that")
+	}
+	return who, organisation, nil
+}
+
 func (a *API) staffGetOrganisation(ctx context.Context, in *OrganisationIDInput) (*OrganisationOutput, error) {
 	who, organisation, err := a.organisationFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	out := &OrganisationOutput{Body: OrganisationItem{
-		ID:                     organisation.ID,
-		OrganisationValuesItem: toValuesItem(organisation.OrganisationValues, a.parentsOf(ctx, organisation.OrganisationValues)),
-	}}
+	out := &OrganisationOutput{Body: toOrganisationItem(organisation,
+		a.parentsOf(ctx, organisation.OrganisationValues), who)}
 
 	collectives, err := a.store.OrganisationCollectives(ctx, organisation.ID)
 	if err != nil {
@@ -230,20 +257,10 @@ func (a *API) staffGetOrganisation(ctx context.Context, in *OrganisationIDInput)
 	for _, collective := range collectives {
 		// A draft of somebody else's is not this editor's to learn about,
 		// here any more than on its own page.
-		if collective.Status.Public() || who.manages(collective) {
+		if collective.Status.Public() || who.authors(collective) {
 			out.Body.Collectives = append(out.Body.Collectives, *toCollectiveRef(collective))
 		}
 	}
-
-	pending, _, err := a.store.ListChanges(ctx, store.ChangeQuery{
-		Statuses:       []models.ChangeStatus{models.ChangePending},
-		OrganisationID: organisation.ID,
-	})
-	if err != nil {
-		log.Error().Err(err).Str("organisation", organisation.ID).Msg("cannot read the changes waiting for an organisation")
-		return nil, huma.Error500InternalServerError("cannot read the organisation")
-	}
-	out.Body.Pending = a.changeItems(ctx, who, pending)
 	return out, nil
 }
 
@@ -294,13 +311,22 @@ func (a *API) organisationValues(ctx context.Context, fields OrganisationFields,
 	}, nil
 }
 
-// ProposeOrganisationInput is a new organisation.
-type ProposeOrganisationInput struct {
+// parentRefusal answers a parent that does not exist or would loop.
+func parentRefusal(err error) error {
+	if errors.Is(err, store.ErrParentNotFound) || errors.Is(err, store.ErrParentLoop) {
+		return huma.Error422UnprocessableEntity(err.Error())
+	}
+	log.Error().Err(err).Msg("cannot check an organisation's parent")
+	return huma.Error500InternalServerError("cannot save the organisation")
+}
+
+// CreateOrganisationInput is a new organisation.
+type CreateOrganisationInput struct {
 	Body OrganisationFields
 }
 
-func (a *API) staffProposeOrganisation(ctx context.Context, in *ProposeOrganisationInput) (*ChangeOutput, error) {
-	who, err := mustStaff(ctx)
+func (a *API) staffCreateOrganisation(ctx context.Context, in *CreateOrganisationInput) (*OrganisationOutput, error) {
+	who, err := mustAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -308,17 +334,33 @@ func (a *API) staffProposeOrganisation(ctx context.Context, in *ProposeOrganisat
 	if err != nil {
 		return nil, err
 	}
-	return a.propose(ctx, who, models.OrganisationChange{Kind: models.ChangeCreate, After: values})
+	if values.ParentID != "" {
+		if err := a.store.CheckParent(ctx, "", values.ParentID); err != nil {
+			return nil, parentRefusal(err)
+		}
+	}
+
+	organisation := &models.Organisation{OrganisationValues: values}
+	if err := a.store.CreateOrganisation(ctx, organisation, a.appName()); err != nil {
+		log.Error().Err(err).Msg("cannot create an organisation")
+		return nil, huma.Error500InternalServerError("cannot create the organisation")
+	}
+	a.ensureDirectoryGroup(ctx, organisation.AdminGroup)
+	a.ensureDirectoryGroup(ctx, organisation.MemberGroup)
+
+	a.audit(ctx, who, models.AuditCreate, "organisation", organisation.ID, "", organisation.Name)
+	return &OrganisationOutput{Body: toOrganisationItem(*organisation,
+		a.parentsOf(ctx, organisation.OrganisationValues), who)}, nil
 }
 
-// ProposeOrganisationUpdateInput is a change to an organisation.
-type ProposeOrganisationUpdateInput struct {
+// SaveOrganisationInput changes an organisation.
+type SaveOrganisationInput struct {
 	ID   string `path:"id"`
 	Body OrganisationFields
 }
 
-func (a *API) staffProposeOrganisationUpdate(ctx context.Context, in *ProposeOrganisationUpdateInput) (*ChangeOutput, error) {
-	who, organisation, err := a.organisationFor(ctx, in.ID)
+func (a *API) staffSaveOrganisation(ctx context.Context, in *SaveOrganisationInput) (*OrganisationOutput, error) {
+	who, organisation, err := a.organisationAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -326,102 +368,85 @@ func (a *API) staffProposeOrganisationUpdate(ctx context.Context, in *ProposeOrg
 	if err != nil {
 		return nil, err
 	}
-	return a.propose(ctx, who, models.OrganisationChange{
-		Kind: models.ChangeUpdate, OrganisationID: organisation.ID, After: values,
-	})
+	if values.ParentID != organisation.ParentID {
+		if err := a.store.CheckParent(ctx, organisation.ID, values.ParentID); err != nil {
+			return nil, parentRefusal(err)
+		}
+	}
+
+	organisation.OrganisationValues = values
+	if err := a.store.SaveOrganisation(ctx, &organisation); err != nil {
+		log.Error().Err(err).Str("organisation", organisation.ID).Msg("cannot save an organisation")
+		return nil, huma.Error500InternalServerError("cannot save the organisation")
+	}
+	a.audit(ctx, who, models.AuditUpdate, "organisation", organisation.ID, "", organisation.Name)
+	return &OrganisationOutput{Body: toOrganisationItem(organisation,
+		a.parentsOf(ctx, organisation.OrganisationValues), who)}, nil
 }
 
-func (a *API) staffProposeOrganisationDeletion(ctx context.Context, in *OrganisationIDInput) (*ChangeOutput, error) {
-	who, organisation, err := a.organisationFor(ctx, in.ID)
+func (a *API) staffDeleteOrganisation(ctx context.Context, in *OrganisationIDInput) (*DoneOutput, error) {
+	who, err := mustAdmin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return a.propose(ctx, who, models.OrganisationChange{
-		Kind: models.ChangeDelete, OrganisationID: organisation.ID,
-	})
+	deleted, err := a.store.DeleteOrganisation(ctx, in.ID)
+	switch {
+	case errors.Is(err, store.ErrOrganisationNotFound):
+		return nil, huma.Error404NotFound("no such organisation")
+	case errors.Is(err, store.ErrOrganisationInUse):
+		return nil, huma.Error409Conflict(err.Error())
+	case err != nil:
+		log.Error().Err(err).Str("organisation", in.ID).Msg("cannot delete an organisation")
+		return nil, huma.Error500InternalServerError("cannot delete the organisation")
+	}
+	// Its logo was its own. Its groups stay in the directory: they are the
+	// operator's to clean up, and people in them may be in them on purpose.
+	a.dropMedia(ctx, deleted.LogoID)
+	a.audit(ctx, who, models.AuditDelete, "organisation", deleted.ID, "", deleted.Name)
+	return done(), nil
 }
 
-func (a *API) staffProposeOrganisationLogo(ctx context.Context, in *LogoInput) (*ChangeOutput, error) {
-	who, organisation, err := a.organisationFor(ctx, in.ID)
+func (a *API) staffPutOrganisationLogo(ctx context.Context, in *LogoInput) (*LogoOutput, error) {
+	who, organisation, err := a.organisationAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
-
 	media, err := a.storeImage(ctx, models.Media{OrganisationID: organisation.ID}, in.ContentType, in.RawBody)
 	if err != nil {
 		return nil, err
 	}
 
-	values := organisation.OrganisationValues
-	values.LogoID = media.ID
-	out, err := a.propose(ctx, who, models.OrganisationChange{
-		Kind: models.ChangeUpdate, OrganisationID: organisation.ID, After: values,
-	})
-	if err != nil {
-		// Proposed with nothing to show for it: the upload is nobody's.
+	previous := organisation.LogoID
+	organisation.LogoID = media.ID
+	if err := a.store.SaveOrganisation(ctx, &organisation); err != nil {
+		log.Error().Err(err).Str("organisation", organisation.ID).Msg("cannot attach a logo")
 		a.dropMedia(ctx, media.ID)
+		return nil, huma.Error500InternalServerError("cannot save the logo")
 	}
-	return out, err
+	// Only once the new one is in place: a failed upload leaves the old one.
+	a.dropMedia(ctx, previous)
+
+	a.audit(ctx, who, models.AuditUpdate, "organisation", organisation.ID, "", organisation.Name+" (logo)")
+	out := &LogoOutput{}
+	out.Body.LogoID = media.ID
+	return out, nil
 }
 
-func (a *API) staffProposeOrganisationLogoRemoval(ctx context.Context, in *OrganisationIDInput) (*ChangeOutput, error) {
-	who, organisation, err := a.organisationFor(ctx, in.ID)
+func (a *API) staffDeleteOrganisationLogo(ctx context.Context, in *OrganisationIDInput) (*DoneOutput, error) {
+	who, organisation, err := a.organisationAdminFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
-	values := organisation.OrganisationValues
-	values.LogoID = ""
-	return a.propose(ctx, who, models.OrganisationChange{
-		Kind: models.ChangeUpdate, OrganisationID: organisation.ID, After: values,
-	})
-}
-
-// propose records a change as the editor's, and logs that they proposed it.
-func (a *API) propose(ctx context.Context, who *staff, change models.OrganisationChange) (*ChangeOutput, error) {
-	change.Author = who.Subject
-	change.AuthorName = who.Name
-
-	if err := a.store.ProposeChange(ctx, &change); err != nil {
-		return nil, changeRefusal(err, "cannot record the proposed change")
+	if organisation.LogoID == "" {
+		return done(), nil
 	}
-
-	a.audit(ctx, who, models.AuditPropose, "organisation", change.OrganisationID, "",
-		string(change.Kind)+": "+changeName(change))
-	log.Info().Str("change", change.ID).Str("kind", string(change.Kind)).
-		Str("organisation", change.OrganisationID).Msg("a change to an organisation was proposed")
-	return &ChangeOutput{Body: a.changeItems(ctx, who, []models.OrganisationChange{change})[0]}, nil
-}
-
-// changeRefusal turns what the store refused into an answer an editor can act
-// on, and anything else into a failure for the log.
-func changeRefusal(err error, failure string) error {
-	switch {
-	case errors.Is(err, store.ErrOrganisationNotFound):
-		return huma.Error404NotFound("no such organisation")
-	case errors.Is(err, store.ErrChangeNotFound):
-		return huma.Error404NotFound("no such change")
-	case errors.Is(err, store.ErrParentNotFound),
-		errors.Is(err, store.ErrParentLoop),
-		errors.Is(err, store.ErrNothingChanged):
-		return huma.Error422UnprocessableEntity(err.Error())
-	case errors.Is(err, store.ErrOrganisationInUse),
-		errors.Is(err, store.ErrChangeConflict),
-		errors.Is(err, store.ErrChangeClosed),
-		errors.Is(err, store.ErrAlreadyVoted):
-		return huma.Error409Conflict(err.Error())
-	case errors.Is(err, store.ErrOwnChange),
-		errors.Is(err, store.ErrNotAuthor):
-		return huma.Error403Forbidden(err.Error())
+	previous := organisation.LogoID
+	organisation.LogoID = ""
+	if err := a.store.SaveOrganisation(ctx, &organisation); err != nil {
+		log.Error().Err(err).Str("organisation", organisation.ID).Msg("cannot detach a logo")
+		return nil, huma.Error500InternalServerError("cannot remove the logo")
 	}
-	log.Error().Err(err).Msg(failure)
-	return huma.Error500InternalServerError(failure)
-}
-
-// changeName is what a change is about, for a log line or a heading: the name
-// it gives the organisation, or the one it had.
-func changeName(change models.OrganisationChange) string {
-	if change.After.Name != "" {
-		return change.After.Name
-	}
-	return change.Before.Name
+	a.dropMedia(ctx, previous)
+	a.audit(ctx, who, models.AuditUpdate, "organisation", organisation.ID, "", organisation.Name+" (logo removed)")
+	return done(), nil
 }

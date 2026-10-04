@@ -68,6 +68,11 @@ type Provisioning struct {
 	// Reconciled is what already existed in the directory and was brought
 	// back in line.
 	Reconciled []string `json:"reconciled,omitempty"`
+
+	// ServiceAccount is the account the backend works as from now on, or
+	// ServiceAccountNote why it kept the operator's token.
+	ServiceAccount     string `json:"service_account,omitempty"`
+	ServiceAccountNote string `json:"service_account_note,omitempty"`
 }
 
 // provisionTimeout is how long provisioning may take: twenty-odd round trips
@@ -82,39 +87,30 @@ func (c *Client) Provision(ctx context.Context, request ProvisionRequest) (Provi
 	return result, err
 }
 
+// RoleRef is one role somebody holds on a collective or an organisation.
+type RoleRef struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Role string `json:"role"`
+}
+
 // Person is somebody with a role in the console.
 type Person struct {
-	PK          int      `json:"pk"`
-	Username    string   `json:"username"`
-	Name        string   `json:"name,omitempty"`
-	Admin       bool     `json:"admin"`
-	Collectives []string `json:"collectives"`
-	Self        bool     `json:"self"`
-}
-
-// Edits reports whether they edit for a collective, for the page's checkboxes.
-func (p Person) Edits(collectiveID string) bool {
-	for _, id := range p.Collectives {
-		if id == collectiveID {
-			return true
-		}
-	}
-	return false
-}
-
-// PeopleCollective is a collective somebody can be made an editor of.
-type PeopleCollective struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Group string `json:"group"`
+	PK       int       `json:"pk"`
+	Username string    `json:"username"`
+	Name     string    `json:"name,omitempty"`
+	Admin    bool      `json:"admin"`
+	Roles    []RoleRef `json:"roles"`
+	Self     bool      `json:"self"`
 }
 
 // People is the staff list.
 type People struct {
-	People        []Person           `json:"people"`
-	Collectives   []PeopleCollective `json:"collectives"`
-	AdminGroup    string             `json:"admin_group"`
-	RecoveryReady bool               `json:"recovery_ready"`
+	People        []Person `json:"people"`
+	AdminGroup    string   `json:"admin_group"`
+	UsersGroup    string   `json:"users_group"`
+	RecoveryReady bool     `json:"recovery_ready"`
 }
 
 // People lists who may use the console. Administrators only.
@@ -122,12 +118,6 @@ func (c *Client) People(ctx context.Context) (People, error) {
 	var people People
 	err := c.get(ctx, "/v1/staff/people", &people)
 	return people, err
-}
-
-// Roles is what somebody may do.
-type Roles struct {
-	Admin       bool     `json:"admin"`
-	Collectives []string `json:"collectives,omitempty"`
 }
 
 // WayIn is a single-use link, shown once.
@@ -140,19 +130,20 @@ type WayIn struct {
 	Adopted bool `json:"adopted"`
 }
 
-// InvitePerson creates somebody with their roles and returns their way in.
-func (c *Client) InvitePerson(ctx context.Context, username, name string, roles Roles) (WayIn, error) {
+// InvitePerson adds somebody to the console — a user, and an administrator
+// when asked — and returns their way in.
+func (c *Client) InvitePerson(ctx context.Context, username, name string, admin bool) (WayIn, error) {
 	var link WayIn
 	err := c.write(ctx, http.MethodPost, "/v1/staff/people", map[string]any{
-		"username": username, "name": name, "admin": roles.Admin, "collectives": roles.Collectives,
+		"username": username, "name": name, "admin": admin,
 	}, &link)
 	return link, err
 }
 
-// SetPersonRoles changes what somebody may do.
-func (c *Client) SetPersonRoles(ctx context.Context, pk int, username string, roles Roles) error {
+// SetPersonAdmin makes somebody an administrator of the site, or not.
+func (c *Client) SetPersonAdmin(ctx context.Context, pk int, username string, admin bool) error {
 	return c.write(ctx, http.MethodPut, "/v1/staff/people/"+strconv.Itoa(pk), map[string]any{
-		"username": username, "admin": roles.Admin, "collectives": roles.Collectives,
+		"username": username, "admin": admin,
 	}, nil)
 }
 

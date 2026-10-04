@@ -152,6 +152,9 @@ func (u User) GroupNames() []string {
 type Group struct {
 	PK   string `json:"pk"`
 	Name string `json:"name"`
+
+	// Roles are the RBAC roles the group's members hold, by identifier.
+	Roles []string `json:"roles,omitempty"`
 }
 
 // Provider is the OAuth2 provider the console authenticates through. The
@@ -826,6 +829,16 @@ func (c *Client) UserByUsername(ctx context.Context, username string) (User, err
 		}
 	}
 	return User{}, fmt.Errorf("%w: user %q", ErrNotFound, username)
+}
+
+// UserByPK finds one person by their key — what a picker in the console
+// sends.
+func (c *Client) UserByPK(ctx context.Context, pk int) (User, error) {
+	var found User
+	if err := c.do(ctx, http.MethodGet, fmt.Sprintf("/core/users/%d/", pk), nil, &found); err != nil {
+		return User{}, err
+	}
+	return found, nil
 }
 
 // AddToGroup gives somebody a role.

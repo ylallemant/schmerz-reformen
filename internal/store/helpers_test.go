@@ -36,12 +36,7 @@ func account(t *testing.T, s *Store, name string) models.Account {
 func collective(t *testing.T, s *Store, name string) models.Collective {
 	t.Helper()
 
-	created := &models.Collective{
-		Name:      name,
-		Slug:      name,
-		AuthGroup: "group-" + models.Slugify(name),
-		Status:    models.StatusPublished,
-	}
+	created := &models.Collective{Name: name, Slug: name, Status: models.StatusPublished}
 	if err := s.CreateCollective(context.Background(), created); err != nil {
 		t.Fatalf("CreateCollective(%q): %v", name, err)
 	}
@@ -83,15 +78,14 @@ func action(t *testing.T, s *Store, collectiveID, title string, startsAt time.Ti
 	return *created
 }
 
-// organisation puts an organisation in directly, the way an approved creation
-// leaves one. Tests about the curation itself go through ProposeChange.
+// organisation puts an organisation in, the way an administrator does.
 func organisation(t *testing.T, s *Store, name, parentID string) models.Organisation {
 	t.Helper()
 
 	created := models.Organisation{OrganisationValues: models.OrganisationValues{
 		Name: name, Kind: models.MemberUnion, ParentID: parentID,
 	}}
-	if err := s.db.Create(&created).Error; err != nil {
+	if err := s.CreateOrganisation(context.Background(), &created, models.DefaultAppName); err != nil {
 		t.Fatalf("create organisation %q: %v", name, err)
 	}
 	return created

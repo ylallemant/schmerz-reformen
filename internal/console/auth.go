@@ -250,7 +250,7 @@ func (c *console) callback(w http.ResponseWriter, r *http.Request) {
 		c.renderSignInFailure(w, r, http.StatusServiceUnavailable, "auth.directory_down")
 		return
 	}
-	if !profile.Admin && len(profile.Collectives) == 0 {
+	if !profile.Allowed {
 		// They authenticated perfectly well and hold no role here. Named,
 		// because the commonest cause is being signed in to the identity
 		// provider as somebody else — the bootstrap account that set this

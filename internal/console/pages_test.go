@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +36,7 @@ type received struct {
 	Method   string
 	Path     string
 	Body     map[string]any
+	Query    url.Values
 	Identity staffauth.Identity
 	Token    string
 }
@@ -66,7 +69,8 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 
 	collective := apiclient.Collective{
 		ID: "c1", Name: hostile, Slug: "buendnis", Summary: hostile, Description: hostile,
-		Website: "https://example.org/", Contact: hostile, Status: "published", AuthGroup: hostile,
+		Website: "https://example.org/", Contact: hostile, Status: "published",
+		AdminGroup: "schmerz-collective-buendnis-admins", AuthorGroup: hostile,
 		Place: hostile, Latitude: 51.2277, Longitude: 6.7735, LogoID: "logo-1",
 		Members: []apiclient.Member{{ID: "m1", OrganisationID: "o1", Name: hostile, Kind: "union",
 			Place: hostile, Position: 1}},
@@ -75,19 +79,10 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		Name: hostile, Kind: "union", Website: "https://example.org/", ParentID: "o2",
 		ParentName: hostile, LogoID: "logo-2", Place: hostile, Latitude: 51.2277, Longitude: 6.7735,
 	}
-	change := apiclient.Change{
-		ID: "ch1", OrganisationID: "o1", Kind: "update", Status: "pending",
-		Fields: []string{"name", "kind", "website", "parent", "place", "logo"},
-		Before: values, After: values, AuthorName: hostile, CanVote: true,
-		Votes:     []apiclient.Vote{{VoterName: hostile, Approve: false, Comment: hostile, At: when}},
-		Approvals: 1, Rejections: 1, Needed: 3, CreatedAt: when,
-	}
-	failed := change
-	failed.ID, failed.Status, failed.Reason, failed.CanVote, failed.Mine = "ch2", "failed", hostile, false, true
 	organisation := apiclient.Organisation{
-		ID: "o1", OrganisationValues: values,
+		ID: "o1", Slug: "verdi", OrganisationValues: values,
+		AdminGroup: "schmerz-organisation-verdi-admins", MemberGroup: hostile,
 		Collectives: []apiclient.CollectiveRef{{ID: "c1", Name: hostile, Slug: "buendnis"}},
-		Pending:     []apiclient.Change{change},
 	}
 	parent := apiclient.Organisation{ID: "o2", OrganisationValues: apiclient.OrganisationValues{
 		Name: hostile, Kind: "union", Place: hostile,
@@ -107,22 +102,57 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		Status: "published", Participants: 41,
 	}
 
+	people := apiclient.EntryPeople{
+		Admins: []apiclient.User{{PK: 7, Username: hostile, Name: hostile}},
+		Others: []apiclient.User{{PK: 8, Username: "kai", Name: hostile}},
+	}
+	users := []apiclient.User{{PK: 7, Username: hostile, Name: hostile}, {PK: 9, Username: "sam", Name: hostile}}
+
+	// What the backend decides per editor: the site's administrators, and
+	// whoever is in an entry's administrators' group, run it.
+	administers := func(r *http.Request, group string) bool {
+		identity, _ := staffauth.Decode(r.Header.Get(staffauth.IdentityHeader))
+		return slices.Contains(identity.Groups, "schmerz-admins") || slices.Contains(identity.Groups, group)
+	}
+	collectiveFor := func(r *http.Request) apiclient.Collective {
+		mine := collective
+		mine.Administers = administers(r, collective.AdminGroup)
+		mine.Authors = true
+		return mine
+	}
+	organisationFor := func(r *http.Request, o apiclient.Organisation) apiclient.Organisation {
+		o.Administers = administers(r, o.AdminGroup)
+		return o
+	}
+
 	answer := func(w http.ResponseWriter, body any) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(body) //nolint:errcheck
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/staff/me", func(w http.ResponseWriter, _ *http.Request) {
-		answer(w, apiclient.StaffProfile{Subject: "development", Admin: true,
-			Collectives: []apiclient.Collective{collective}, Waiting: 2})
+	mux.HandleFunc("GET /v1/staff/me", func(w http.ResponseWriter, r *http.Request) {
+		answer(w, apiclient.StaffProfile{Subject: "development", Admin: administers(r, ""), Allowed: true,
+			Collectives:   []apiclient.Collective{collectiveFor(r)},
+			Organisations: []apiclient.Organisation{organisationFor(r, organisation)}})
 	})
 	mux.HandleFunc("GET /v1/staff/collectives/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "c1" {
 			http.Error(w, `{"detail":"no such collective"}`, http.StatusNotFound)
 			return
 		}
-		answer(w, collective)
+		answer(w, collectiveFor(r))
+	})
+	mux.HandleFunc("GET /v1/staff/collectives/{id}/people", func(w http.ResponseWriter, r *http.Request) {
+		mine := people
+		mine.MayGrantAdmins = administers(r, "")
+		answer(w, mine)
+	})
+	mux.HandleFunc("GET /v1/staff/organisations/{id}/people", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, people)
+	})
+	mux.HandleFunc("GET /v1/staff/users", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, map[string]any{"users": users})
 	})
 	mux.HandleFunc("GET /v1/staff/collectives/{id}/topics", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, map[string]any{"topics": []apiclient.Topic{topic}})
@@ -136,36 +166,28 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 		answer(w, map[string]any{"actions": []apiclient.Action{action}})
 	})
 	mux.HandleFunc("GET /v1/staff/actions/{id}", func(w http.ResponseWriter, _ *http.Request) { answer(w, action) })
-	mux.HandleFunc("GET /v1/staff/organisations", func(w http.ResponseWriter, _ *http.Request) {
-		answer(w, map[string]any{"organisations": []apiclient.Organisation{organisation, parent}, "total": 2})
+	mux.HandleFunc("GET /v1/staff/organisations", func(w http.ResponseWriter, r *http.Request) {
+		answer(w, map[string]any{"organisations": []apiclient.Organisation{
+			organisationFor(r, organisation), organisationFor(r, parent)}, "total": 2})
 	})
 	mux.HandleFunc("GET /v1/staff/organisations/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if r.PathValue("id") != "o1" {
 			http.Error(w, `{"detail":"no such organisation"}`, http.StatusNotFound)
 			return
 		}
-		answer(w, organisation)
-	})
-	mux.HandleFunc("GET /v1/staff/changes", func(w http.ResponseWriter, _ *http.Request) {
-		answer(w, map[string]any{"changes": []apiclient.Change{change, failed}, "total": 2})
-	})
-	mux.HandleFunc("GET /v1/staff/changes/{id}", func(w http.ResponseWriter, r *http.Request) {
-		switch r.PathValue("id") {
-		case "ch1":
-			answer(w, change)
-		case "ch2":
-			answer(w, failed)
-		default:
-			http.Error(w, `{"detail":"no such change"}`, http.StatusNotFound)
-		}
+		answer(w, organisationFor(r, organisation))
 	})
 	mux.HandleFunc("GET /v1/staff/people", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, apiclient.People{
-			AdminGroup: "schmerz-admins", RecoveryReady: false,
-			Collectives: []apiclient.PeopleCollective{{ID: "c1", Name: hostile, Group: hostile}},
+			AdminGroup: "schmerz-admins", UsersGroup: "schmerz-users", RecoveryReady: false,
 			People: []apiclient.Person{
-				{PK: 7, Username: hostile, Name: hostile, Admin: true, Collectives: []string{"c1"}, Self: true},
-				{PK: 8, Username: "kai", Name: hostile, Collectives: []string{}},
+				{PK: 7, Username: hostile, Name: hostile, Admin: true, Self: true, Roles: []apiclient.RoleRef{
+					{Kind: "collective", ID: "c1", Name: hostile, Role: "admins"},
+					{Kind: "collective", ID: "c1", Name: hostile, Role: "authors"},
+					{Kind: "organisation", ID: "o1", Name: hostile, Role: "admins"},
+					{Kind: "organisation", ID: "o1", Name: hostile, Role: "members"},
+				}},
+				{PK: 8, Username: "kai", Name: hostile},
 			},
 		})
 	})
@@ -212,11 +234,13 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("POST /v1/staff/people/{pk}/link", write(apiclient.WayIn{Username: "kai", Link: "https://auth.example/if/flow/recovery/?token=again"}))
 	mux.HandleFunc("PUT /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("DELETE /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
-	mux.HandleFunc("POST /v1/staff/organisations", write(change))
-	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(change))
-	mux.HandleFunc("POST /v1/staff/organisations/{id}/deletion", write(change))
-	mux.HandleFunc("POST /v1/staff/changes/{id}/votes", write(change))
-	mux.HandleFunc("POST /v1/staff/changes/{id}/withdrawal", write(change))
+	mux.HandleFunc("POST /v1/staff/organisations", write(organisation))
+	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(organisation))
+	mux.HandleFunc("DELETE /v1/staff/organisations/{id}", write(map[string]bool{"done": true}))
+	for _, kind := range []string{"collectives", "organisations"} {
+		mux.HandleFunc("PUT /v1/staff/"+kind+"/{id}/people/{role}/{pk}", write(map[string]bool{"done": true}))
+		mux.HandleFunc("DELETE /v1/staff/"+kind+"/{id}/people/{role}/{pk}", write(map[string]bool{"done": true}))
+	}
 	mux.HandleFunc("DELETE /v1/staff/topics/{id}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("DELETE /v1/staff/collectives/{id}", write(map[string]bool{"done": true}))
 
@@ -228,7 +252,7 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 			return
 		}
 
-		entry := received{Method: r.Method, Path: r.URL.Path, Identity: identity, Token: token}
+		entry := received{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Identity: identity, Token: token}
 		if r.Method != http.MethodGet {
 			raw, _ := io.ReadAll(r.Body)
 			json.Unmarshal(raw, &entry.Body) //nolint:errcheck // an empty body is simply nil
@@ -364,9 +388,7 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/organisations"},
 		{path: "/organisations/new"},
 		{path: "/organisations/o1"},
-		{path: "/organisations/o1?notice=proposed#de"},
-		{path: "/changes/ch1"},
-		{path: "/changes/ch2#de"},
+		{path: "/organisations/o1?notice=saved#de"},
 		{path: "/collectives/c1/topics"},
 		{path: "/collectives/c1/topics/new"},
 		{path: "/topics/t1"},
@@ -576,44 +598,94 @@ func TestWhatAnEditorCannotUseIsNotDrawn(t *testing.T) {
 	backend, _ := fakeBackend(t, false)
 
 	_, asAdmin := get(t, served(t, backend.URL), "/collectives/c1")
-	_, asEditor := get(t, served(t, backend.URL, "duesseldorf"), "/collectives/c1")
+	_, asCollectiveAdmin := get(t, served(t, backend.URL, "schmerz-collective-buendnis-admins"), "/collectives/c1")
+	_, asAuthor := get(t, served(t, backend.URL, "schmerz-collective-buendnis-authors"), "/collectives/c1")
 
 	if !strings.Contains(asAdmin, `href="/settings/theme"`) {
 		t.Error("an administrator is not offered the theme page")
 	}
-	if strings.Contains(asEditor, `href="/settings/theme"`) {
-		t.Error("an editor is offered the theme page")
+	if strings.Contains(asCollectiveAdmin, `href="/settings/theme"`) {
+		t.Error("a collective's administrator is offered the theme page")
 	}
-	if strings.Contains(asEditor, `/collectives/c1/delete`) {
-		t.Error("an editor is offered the deletion of a collective")
-	}
-	// The address and the group are shown to an editor — they should be able
-	// to see which group they are here because of — and are not editable.
-	if !strings.Contains(asEditor, `id="slug" name="slug"`) || !strings.Contains(asEditor, "readonly") {
-		t.Error("an editor is not shown the address and the group as read-only")
+	if strings.Contains(asCollectiveAdmin, `/collectives/c1/delete`) {
+		t.Error("a collective's administrator is offered its deletion")
 	}
 
-	response, _ := get(t, served(t, backend.URL, "duesseldorf"), "/collectives/new")
+	// A collective's administrator edits it and chooses its authors, and
+	// not its administrators: those are the site's to choose.
+	if strings.Contains(asCollectiveAdmin, " disabled>") {
+		t.Error("the collective's own administrator is shown a locked form")
+	}
+	if !strings.Contains(asCollectiveAdmin, `id="give-author"`) {
+		t.Error("a collective's administrator is not offered to choose an author")
+	}
+	if strings.Contains(asCollectiveAdmin, `id="give-admin"`) {
+		t.Error("a collective's administrator is offered to choose another")
+	}
+	if !strings.Contains(asAdmin, `id="give-admin"`) {
+		t.Error("the site's administrator is not offered to choose a collective's")
+	}
+	// The address and the groups are shown — an editor should see which
+	// group they are here because of — and are not editable.
+	if !strings.Contains(asCollectiveAdmin, `id="slug" name="slug"`) || !strings.Contains(asCollectiveAdmin, "readonly") ||
+		!strings.Contains(asCollectiveAdmin, "schmerz-collective-buendnis-admins") {
+		t.Error("the address and the groups are not shown read-only")
+	}
+
+	// An author writes topics, updates and actions, and reads the profile.
+	if !strings.Contains(asAuthor, " disabled>") {
+		t.Error("an author is shown the collective's profile as editable")
+	}
+	for _, offered := range []string{`/collectives/c1/logo`, `id="give-author"`, `action="/collectives/c1/members"`} {
+		if strings.Contains(asAuthor, offered) {
+			t.Errorf("an author is offered %s", offered)
+		}
+	}
+
+	response, _ := get(t, served(t, backend.URL, "schmerz-collective-buendnis-admins"), "/collectives/new")
 	if response.StatusCode != http.StatusForbidden {
 		t.Errorf("an editor opening the new-collective form = %d, want 403", response.StatusCode)
 	}
+	response, _ = get(t, served(t, backend.URL, "schmerz-organisation-verdi-admins"), "/organisations/new")
+	if response.StatusCode != http.StatusForbidden {
+		t.Errorf("an organisation's administrator opening the new-organisation form = %d, want 403", response.StatusCode)
+	}
 }
 
-// TestOrganisationFormsProposeRatherThanSave: every form about an
-// organisation sends a proposal, and the editor is taken to it and told that
-// nothing has changed yet.
-func TestOrganisationFormsProposeRatherThanSave(t *testing.T) {
+// TestAnOrganisationIsRunByItsAdministrators: they edit it and choose its
+// people; anybody else reads it; only the site's administrators create and
+// delete one.
+func TestAnOrganisationIsRunByItsAdministrators(t *testing.T) {
 	backend, log := fakeBackend(t, false)
-	console := served(t, backend.URL)
 
+	_, asOwn := get(t, served(t, backend.URL, "schmerz-organisation-verdi-admins"), "/organisations/o1")
+	_, asOther := get(t, served(t, backend.URL, "schmerz-collective-buendnis-authors"), "/organisations/o1")
+	_, asAdmin := get(t, served(t, backend.URL), "/organisations/o1")
+
+	if !strings.Contains(asOwn, `action="/organisations/o1"`) || !strings.Contains(asOwn, `id="give-member"`) ||
+		!strings.Contains(asOwn, `id="give-admin"`) {
+		t.Error("an organisation's administrator is not offered its form and its people")
+	}
+	if strings.Contains(asOwn, "/organisations/o1/delete") {
+		t.Error("an organisation's administrator is offered its deletion")
+	}
+	for _, offered := range []string{`action="/organisations/o1"`, "/organisations/o1/logo", "/organisations/o1/people"} {
+		if strings.Contains(asOther, offered) {
+			t.Errorf("somebody who does not run the organisation is offered %s", offered)
+		}
+	}
+	if !strings.Contains(asAdmin, "/organisations/o1/delete") {
+		t.Error("the site's administrator is not offered the deletion")
+	}
+
+	console := served(t, backend.URL)
 	response, _ := post(t, console, "/organisations", url.Values{
 		"name": {"ver.di Düsseldorf"}, "kind": {"union"}, "website": {"https://example.org"},
 		"parent_id": {" o2 "}, "latitude": {"51.2277"}, "longitude": {"6.7735"}, "zoom": {"17"},
 		"place": {"Karlstraße 123"},
 	})
-	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/changes/ch1?notice=proposed" {
-		t.Fatalf("proposing = %d to %q, want the change with the proposed notice",
-			response.StatusCode, response.Header.Get("Location"))
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/organisations/o1?notice=created" {
+		t.Fatalf("creating = %d to %q", response.StatusCode, response.Header.Get("Location"))
 	}
 	sent, _ := log.last(http.MethodPost, "/v1/staff/organisations")
 	if sent.Body["name"] != "ver.di Düsseldorf" || sent.Body["parent_id"] != "o2" ||
@@ -621,18 +693,22 @@ func TestOrganisationFormsProposeRatherThanSave(t *testing.T) {
 		t.Errorf("sent %v", sent.Body)
 	}
 
-	_, rendered := get(t, console, "/changes/ch1?notice=proposed#de")
-	if !strings.Contains(rendered, "Es ändert sich nichts") {
-		t.Error("the editor is not told that nothing has changed yet")
+	// Giving a role from the picker sends the key; taking one from a row
+	// sends the username along, for the backend's log.
+	response, _ = post(t, console, "/organisations/o1/people", url.Values{
+		"role": {"members"}, "pk": {"9"}, "action": {"give"},
+	})
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/organisations/o1?notice=saved#people" {
+		t.Fatalf("giving = %d to %q", response.StatusCode, response.Header.Get("Location"))
 	}
-
-	response, _ = post(t, console, "/changes/ch1/vote", url.Values{"vote": {"reject"}, "comment": {"Falscher Name"}})
-	if response.StatusCode != http.StatusSeeOther {
-		t.Fatalf("voting = %d", response.StatusCode)
+	if _, ok := log.last(http.MethodPut, "/v1/staff/organisations/o1/people/members/9"); !ok {
+		t.Error("the role was not given")
 	}
-	sent, _ = log.last(http.MethodPost, "/v1/staff/changes/ch1/votes")
-	if sent.Body["approve"] != false || sent.Body["comment"] != "Falscher Name" {
-		t.Errorf("vote sent as %v", sent.Body)
+	post(t, console, "/collectives/c1/people", url.Values{
+		"role": {"authors"}, "pk": {"8"}, "username": {"kai"}, "action": {"take"},
+	})
+	if sent, ok := log.last(http.MethodDelete, "/v1/staff/collectives/c1/people/authors/8"); !ok || sent.Query.Get("username") != "kai" {
+		t.Errorf("the role was not taken, or not by name: %v", sent.Query)
 	}
 
 	response, _ = post(t, console, "/collectives/c1/members", url.Values{"organisation_id": {"o2"}})
@@ -666,5 +742,36 @@ func TestTheMemberPickerOffersOnlyWhatIsNotListedYet(t *testing.T) {
 	}
 	if !strings.Contains(rendered, `<option value="o2" data-search=`) || !strings.Contains(rendered, `selected>`) {
 		t.Error("the current parent is not offered, or not chosen")
+	}
+}
+
+// TestAPageOutlivesItsDirectory: the people of a collective or an
+// organisation are in the identity provider, the rest of its page in the
+// database. Before the setup wizard has run, or while Authentik is down, the
+// page is still drawn, and says why its people are not.
+func TestAPageOutlivesItsDirectory(t *testing.T) {
+	backend, _ := fakeBackend(t, false)
+	target, _ := url.Parse(backend.URL)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	away := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/people") || r.URL.Path == "/v1/staff/users" {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte(`{"detail":"no identity provider is configured: run the console's setup wizard first"}`)) //nolint:errcheck
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	t.Cleanup(away.Close)
+	console := served(t, away.URL)
+
+	for _, path := range []string{"/collectives/c1", "/organisations/o1", "/settings/people"} {
+		response, rendered := get(t, console, path)
+		if response.StatusCode != http.StatusOK {
+			t.Errorf("%s with the directory away = %d, want the page", path, response.StatusCode)
+		}
+		if !strings.Contains(rendered, "no identity provider is configured") {
+			t.Errorf("%s does not say why its people are missing", path)
+		}
 	}
 }

@@ -76,19 +76,6 @@
       {{ template "navlink" dict "Page" . "Href" "/settings/theme" "Key" "nav.theme" }}
       {{ end }}
       <span class="nav-spacer"></span>
-      {{/* Local only: which stand-in editor this browser is. Approving a
-           change takes editors other than its author, so one person testing
-           locally needs to be several. */}}
-      {{ if .Development }}
-      <form class="languages" method="post" action="/development/stand-in" aria-label="{{ .T "nav.stand_in" }}">
-        <input type="hidden" name="next" value="{{ .Here }}">
-        <span class="nav-identity">{{ .T "nav.stand_in" }}</span>
-        {{ $current := .StandIn }}
-        {{ range .StandIns }}
-        <button type="submit" name="stand_in" value="{{ . }}" aria-pressed="{{ if eq . $current }}true{{ else }}false{{ end }}">{{ . }}</button>
-        {{ end }}
-      </form>
-      {{ end }}
       <span class="nav-identity">{{ .Editor }}</span>
       {{/* A form, because signing out is a change. A link would be followed
            by every prefetcher that touches the page. */}}
@@ -223,9 +210,58 @@
 </div>
 {{end}}
 
-{{/* A change's status as a pill: what is still waiting is the one that asks
-     for attention. */}}
-{{define "change-status"}}<span class="pill{{ if eq .Status "applied" }} ok{{ end }}">{{ .Page.T (printf "change_status.%s" .Status) }}</span>{{end}}
+{{/* The user picker: the same combobox as the organisation picker, over
+     the console's users — searched by name and username. */}}
+{{define "user-picker"}}
+{{ $page := .Page }}
+<div class="combo" data-combobox
+     data-placeholder="{{ $page.T "picker.search_people" }}" data-empty="{{ $page.T "picker.no_person" }}"
+     data-required-message="{{ $page.T "picker.required_person" }}">
+  <select id="{{ .ID }}" name="pk" required>
+    <option value="">{{ $page.T "picker.choose" }}</option>
+    {{ range .Users }}
+    <option value="{{ .PK }}" data-search="{{ .Name }} {{ .Username }}" data-name="{{ .Name }}" data-detail="{{ .Username }}">{{ .Name }} · {{ .Username }}</option>
+    {{ end }}
+  </select>
+</div>
+{{end}}
+
+{{/* The people of one collective or organisation, by role: who holds it,
+     a control to take it away, and a picker to give it — each only where
+     the editor may. Arguments: Page, Action (the form's address), Role (as
+     the backend names it), Title and Empty (catalogue keys), People, Users,
+     MayChange, and ID (unique on the page, for the picker). */}}
+{{define "entry-people"}}
+{{ $page := .Page }}{{ $action := .Action }}{{ $role := .Role }}{{ $may := .MayChange }}
+<h3>{{ $page.T .Title }}</h3>
+{{ if .People }}
+<ul class="plain-list">
+  {{ range .People }}
+  <li class="person-row">
+    <span><strong>{{ .Name }}</strong> <span class="hint mono">{{ .Username }}</span></span>
+    {{ if $may }}
+    <form method="post" action="{{ $action }}" data-confirm="{{ $page.T "people.take_confirm" }}">
+      <input type="hidden" name="role" value="{{ $role }}">
+      <input type="hidden" name="pk" value="{{ .PK }}">
+      <input type="hidden" name="username" value="{{ .Username }}">
+      <button class="button secondary small" type="submit" name="action" value="take">{{ $page.T "people.take" }}</button>
+    </form>
+    {{ end }}
+  </li>
+  {{ end }}
+</ul>
+{{ else }}
+<p class="empty">{{ $page.T .Empty }}</p>
+{{ end }}
+{{ if $may }}
+<form method="post" action="{{ $action }}">
+  <input type="hidden" name="role" value="{{ $role }}">
+  <label for="{{ .ID }}">{{ $page.T "people.give_label" }}</label>
+  {{ template "user-picker" dict "Page" $page "ID" .ID "Users" .Users }}
+  <button class="button secondary small" type="submit" name="action" value="give">{{ $page.T "people.give" }}</button>
+</form>
+{{ end }}
+{{end}}
 
 {{/* The tabs of one collective: its profile, its topics, its actions. */}}
 {{define "collective-tabs"}}

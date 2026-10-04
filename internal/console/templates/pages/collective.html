@@ -20,6 +20,9 @@
 
 <div class="split">
   <form class="prose" method="post" action="{{ if .New }}/collectives{{ else }}/collectives/{{ .Collective.ID }}{{ end }}">
+    {{ $mayEdit := or .New .Collective.Administers }}
+    {{ if not $mayEdit }}<p class="form-notice">{{ .T "collective.read_only" }}</p>{{ end }}
+    <fieldset class="bare"{{ if not $mayEdit }} disabled{{ end }}>
     <label for="name">{{ .T "field.name" }}</label>
     <input type="text" id="name" name="name" maxlength="120" required autocomplete="off" value="{{ .Form.Name }}">
 
@@ -46,10 +49,10 @@
 
     {{ template "place-picker" dict "Page" . "Place" .Form.Place "Zoom" .Zoom "Hint" "collective.place_hint" }}
 
-    {{/* The two fields that decide where the collective lives and who may
-         edit it. Shown to everybody and editable by an administrator only:
-         an editor should be able to see which group they are in because of,
-         and the backend ignores both from anybody else. */}}
+    {{/* The slug is in every link already printed and the groups decide who
+         may do what; the groups are named from the slug when the collective
+         is created and never renamed. Both are shown so an editor can see
+         which group they are here because of. */}}
     <fieldset class="fieldset">
       <legend>{{ .T "collective.access_legend" }}</legend>
 
@@ -59,17 +62,23 @@
       <input type="text" id="slug" name="slug" maxlength="80" autocomplete="off"
              value="{{ .Form.Slug }}"{{ if not .Admin }} readonly{{ end }}>
 
-      <label for="auth_group">{{ .T "field.auth_group" }}
-        <span class="hint">{{ .T "collective.auth_group_hint" }}</span>
-      </label>
-      <input type="text" id="auth_group" name="auth_group" maxlength="120" autocomplete="off"
-             value="{{ .Form.AuthGroup }}"{{ if not .Admin }} readonly{{ end }}>
+      {{ if not .New }}
+      <dl class="facts">
+        <dt>{{ .T "collective.admin_group" }}</dt><dd class="mono">{{ .Collective.AdminGroup }}</dd>
+        <dt>{{ .T "collective.author_group" }}</dt><dd class="mono">{{ .Collective.AuthorGroup }}</dd>
+      </dl>
+      {{ else }}
+      <p class="hint">{{ .T "collective.groups_hint" }}</p>
+      {{ end }}
       {{ if not .Admin }}<p class="hint">{{ .T "collective.access_admin_only" }}</p>{{ end }}
     </fieldset>
 
     {{ template "status-field" dict "Page" . "Statuses" .Statuses "Current" .Form.Status }}
 
+    {{ if $mayEdit }}
     <button class="button" type="submit">{{ if .New }}{{ .T "button.create" }}{{ else }}{{ .T "button.save" }}{{ end }}</button>
+    {{ end }}
+    </fieldset>
   </form>
 
   {{ if not .New }}
@@ -81,6 +90,7 @@
       {{ else }}
       <span class="logo-box initial" aria-hidden="true">{{ initial .Collective.Name }}</span>
       {{ end }}
+      {{ if .Collective.Administers }}
       <form class="profile-body" method="post" action="/collectives/{{ .Collective.ID }}/logo" enctype="multipart/form-data">
         <label for="logo">{{ .T "logo.choose" }}
           <span class="hint">{{ .T "logo.hint" }}</span>
@@ -93,6 +103,7 @@
           {{ end }}
         </div>
       </form>
+      {{ end }}
     </div>
 
     <h2 id="members">{{ .T "members.title" }}</h2>
@@ -115,7 +126,9 @@
             <td><a class="link" href="/organisations/{{ .OrganisationID }}">{{ .Name }}</a>{{ if .Place }}<br><span class="hint">{{ .Place }}</span>{{ end }}</td>
             <td>{{ $page.T (printf "member_kind.%s" .Kind) }}</td>
             <td class="actions-column">
+              {{ if $page.Collective.Administers }}
               <a class="button secondary small" href="/collectives/{{ $page.Collective.ID }}/members/{{ .ID }}">{{ $page.T "members.place_in_list" }}</a>
+              {{ end }}
             </td>
           </tr>
           {{ end }}
@@ -126,8 +139,9 @@
     <p class="empty">{{ .T "members.empty" }}</p>
     {{ end }}
 
-    {{/* Only organisations that exist can be added. One that does not yet is
-         proposed first, and is here once other editors have approved it. */}}
+    {{/* Only organisations that exist can be added; the site's
+         administrators create them. */}}
+    {{ if .Collective.Administers }}
     <form method="post" action="/collectives/{{ .Collective.ID }}/members">
       <h3>{{ .T "members.add" }}</h3>
       <label for="organisation_id">{{ .T "members.choose" }}
@@ -137,9 +151,23 @@
            "Organisations" .Organisations "Selected" "" "Exclude" "" "None" false "Required" true }}
       <div class="button-row">
         <button class="button secondary" type="submit">{{ .T "members.add" }}</button>
-        <a class="link" href="/organisations/new">{{ .T "members.missing" }}</a>
+        {{ if .Admin }}<a class="link" href="/organisations/new">{{ .T "members.missing" }}</a>{{ end }}
       </div>
     </form>
+
+    <h2 id="people">{{ .T "collective.people_title" }}</h2>
+    <p class="section-note">{{ .T "collective.people_lede" }}</p>
+    {{ if .PeopleProblem }}
+    <p class="warning" role="status">{{ .PeopleProblem }}</p>
+    {{ else }}
+    {{ template "entry-people" dict "Page" . "Action" (printf "/collectives/%s/people" .Collective.ID)
+         "Role" "authors" "Title" "collective.authors" "Empty" "collective.authors_empty"
+         "People" .People.Others "Users" .Users "MayChange" true "ID" "give-author" }}
+    {{ template "entry-people" dict "Page" . "Action" (printf "/collectives/%s/people" .Collective.ID)
+         "Role" "admins" "Title" "collective.admins" "Empty" "collective.admins_empty"
+         "People" .People.Admins "Users" .Users "MayChange" .People.MayGrantAdmins "ID" "give-admin" }}
+    {{ end }}
+    {{ end }}
   </aside>
   {{ end }}
 </div>

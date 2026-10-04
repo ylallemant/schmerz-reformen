@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -196,30 +197,6 @@ func chdir(t *testing.T, dir string) {
 	t.Cleanup(func() { os.Chdir(old) }) //nolint:errcheck
 }
 
-func TestOrganisationApprovals(t *testing.T) {
-	cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
-	Reset()
-	t.Cleanup(Reset)
-	RegisterCommonFlags(cmd, 8080, 8081)
-	RegisterCurationFlags(cmd)
-	cmd.SetArgs(nil)
-	if err := cmd.Execute(); err != nil {
-		t.Fatal(err)
-	}
-	if err := Bootstrap(cmd); err != nil {
-		t.Fatal(err)
-	}
-
-	if got, err := LoadOrganisationApprovals(); err != nil || got != DefaultOrganisationApprovals {
-		t.Errorf("default = %d, %v; want %d", got, err, DefaultOrganisationApprovals)
-	}
-
-	t.Setenv("SCHMERZ_ORGANISATION_APPROVALS", "0")
-	if _, err := LoadOrganisationApprovals(); err == nil {
-		t.Error("zero approvals was accepted: a change would need nobody's agreement")
-	}
-}
-
 func TestTheWizardIsOfferedTheAuthentikInstance(t *testing.T) {
 	for in, want := range map[string]string{
 		"":                          "",
@@ -260,6 +237,45 @@ func TestTheIssuerReachesTheWizardFromTheEnvironment(t *testing.T) {
 	}
 	if got.Superuser {
 		t.Error("--superuser defaulted to on")
+	}
+}
+
+// TestDevelopmentGroupsReadTheSameFromEverySource: the flag is a
+// comma-separated list, and Viper splits the environment on spaces only — so
+// "a,b" in SCHMERZ_DEVELOPMENT_GROUPS was once one group called "a,b".
+func TestDevelopmentGroupsReadTheSameFromEverySource(t *testing.T) {
+	for name, set := range map[string]func(*cobra.Command){
+		"environment": func(*cobra.Command) {
+			t.Setenv("SCHMERZ_DEVELOPMENT_GROUPS", "schmerz-users, schmerz-collective-koeln-authors")
+		},
+		"flag": func(cmd *cobra.Command) {
+			cmd.SetArgs([]string{"--development-groups", "schmerz-users,schmerz-collective-koeln-authors"})
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+			Reset()
+			t.Cleanup(Reset)
+			RegisterCommonFlags(cmd, 8080, 8081)
+			RegisterOIDCFlags(cmd)
+			cmd.SetArgs(nil)
+			set(cmd)
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if err := Bootstrap(cmd); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := LoadOIDC()
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"schmerz-users", "schmerz-collective-koeln-authors"}
+			if !slices.Equal(got.DevelopmentGroups, want) {
+				t.Errorf("groups = %q, want %q", got.DevelopmentGroups, want)
+			}
+		})
 	}
 }
 

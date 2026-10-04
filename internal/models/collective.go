@@ -38,17 +38,20 @@ type Collective struct {
 	// fighting over. Optional — a national alliance has no pin.
 	Location Location `gorm:"embedded;embeddedPrefix:location_" json:"location"`
 
-	// AuthGroup is the identity-provider group whose members may manage this
-	// collective's content.
+	// AdminGroup and AuthorGroup are the identity-provider groups of the
+	// collective's administrators — who edit its profile, choose its member
+	// organisations and its authors — and of its authors, who publish its
+	// topics, news and actions.
 	//
-	// It is the whole of the permission model: there is no table of editors
-	// here, no invitations and no roles of our own. A collective adds and
-	// removes its content creators in the identity provider, where the people
-	// already are, and this site reads the answer at sign-in.
+	// They are the whole of the permission model: there is no table of
+	// editors here. Named from the slug when the collective is created and
+	// stored, so changing the slug later never orphans them; created in the
+	// directory by the backend.
 	//
 	// Never serialised to the public API: the name of a group in somebody's
 	// identity provider is nobody else's business.
-	AuthGroup string `gorm:"index;size:128" json:"-"`
+	AdminGroup  string `gorm:"index;size:160" json:"-"`
+	AuthorGroup string `gorm:"index;size:160" json:"-"`
 
 	// LogoID is the uploaded logo, if there is one.
 	LogoID string `gorm:"size:36" json:"logo_id,omitempty"`
