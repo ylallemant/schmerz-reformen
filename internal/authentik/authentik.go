@@ -591,21 +591,24 @@ func (c *Client) EnsureApplication(ctx context.Context, name, slug string, provi
 			provider.Name, assigned)
 	}
 
-	var found page[Application]
-	err := c.do(ctx, http.MethodGet, "/core/applications/?slug="+url.QueryEscape(slug), nil, &found)
-	if err != nil {
+	// Asked of the application itself, never of the list. Authentik caches
+	// each user's application list, and a list answered from that cache
+	// named an application deleted since — which the PATCH that followed,
+	// reading the database, then could not find. Retrieving by slug reads the
+	// database too, so the two agree.
+	path := "/core/applications/" + url.PathEscape(slug) + "/"
+	var app Application
+	err := c.do(ctx, http.MethodGet, path, nil, &app)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		// Not there: created below.
+	case err != nil:
 		return Application{}, err
-	}
-	for _, app := range found.Results {
-		if app.Slug != slug {
-			continue
-		}
-		if app.Provider != nil && *app.Provider == provider.PK {
-			log.Debug().Str("application", slug).Msg("authentik: application already as wanted")
-			return app, nil
-		}
+	case app.Provider != nil && *app.Provider == provider.PK:
+		log.Debug().Str("application", slug).Msg("authentik: application already as wanted")
+		return app, nil
+	default:
 		var patched Application
-		path := "/core/applications/" + url.PathEscape(slug) + "/"
 		if err := c.do(ctx, http.MethodPatch, path, map[string]any{"provider": provider.PK}, &patched); err != nil {
 			return Application{}, fmt.Errorf("point the application %q at its provider: %w", slug, err)
 		}

@@ -479,6 +479,15 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		answer(404, nil)
 
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/core/applications/") && path != "/core/applications/":
+		for _, app := range f.applications {
+			if app["slug"] == strings.Trim(strings.TrimPrefix(path, "/core/applications/"), "/") {
+				answer(200, app)
+				return
+			}
+		}
+		answer(404, map[string]any{"detail": "Not found."})
+
 	case r.Method == http.MethodGet && path == "/core/applications/":
 		var results []any
 		for _, app := range f.applications {

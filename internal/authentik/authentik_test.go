@@ -732,10 +732,9 @@ func TestAProviderLeftAtAnOldAddressIsBroughtBack(t *testing.T) {
 // never taken from another application.
 func TestTheApplicationIsPointedAtThisSitesProvider(t *testing.T) {
 	f := newFake(t)
-	f.handle("/api/v3/core/applications/", 200, list(map[string]any{
+	f.handle("/api/v3/core/applications/schmerz/", 200, map[string]any{
 		"pk": "app-1", "name": "schmerz console", "slug": "schmerz", "provider": 3,
-	}))
-	f.handle("/api/v3/core/applications/schmerz/", 200, map[string]any{})
+	})
 
 	app, err := f.client(t).EnsureApplication(context.Background(), "schmerz console", "schmerz", Provider{PK: 7})
 	if err != nil {
@@ -749,6 +748,28 @@ func TestTheApplicationIsPointedAtThisSitesProvider(t *testing.T) {
 		Provider{PK: 7, Name: "schmerz console", AssignedApplicationSlug: "somebody-elses"})
 	if err == nil || !strings.Contains(err.Error(), "somebody-elses") {
 		t.Errorf("a provider serving another application: err = %v", err)
+	}
+}
+
+// TestAnApplicationIsLookedUpByItsSlugNotListed: Authentik's application
+// list is cached per user and named an application deleted since. Setup
+// believed it, and failed patching something that was not there.
+func TestAnApplicationIsLookedUpByItsSlugNotListed(t *testing.T) {
+	f := newFake(t)
+	// A stale list: the application is in it, and nowhere else.
+	f.handle("/api/v3/core/applications/", 200, list(map[string]any{
+		"pk": "gone", "name": "schmerz console", "slug": "schmerz", "provider": 3,
+	}))
+	f.handle("/api/v3/core/applications/schmerz/", 404, map[string]any{"detail": "Not found."})
+
+	if _, err := f.client(t).EnsureApplication(context.Background(), "schmerz console", "schmerz", Provider{PK: 7}); err != nil {
+		t.Fatalf("EnsureApplication: %v", err)
+	}
+	if sent := f.bodies["POST /api/v3/core/applications/"]; sent["slug"] != "schmerz" || sent["provider"] != float64(7) {
+		t.Errorf("the application was not created: sent %v, calls %v", sent, f.seen)
+	}
+	if _, patched := f.bodies["PATCH /api/v3/core/applications/schmerz/"]; patched {
+		t.Error("an application that does not exist was patched")
 	}
 }
 
