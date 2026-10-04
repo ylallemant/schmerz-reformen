@@ -198,16 +198,16 @@ func TestTheDoorIsDecidedOnceAndShutWhenInDoubt(t *testing.T) {
 	client, _ := apiclient.New(backend.server.URL)
 	ctx := context.Background()
 
-	if door := decideSetupDoor(ctx, client, false); !door.Open || door.Reprovision {
+	if door, _ := decideSetupDoor(ctx, client, false); !door.Open || door.Reprovision {
 		t.Errorf("unprovisioned: %+v, want open", door)
 	}
 	backend.mu.Lock()
 	backend.provisioned = true
 	backend.mu.Unlock()
-	if door := decideSetupDoor(ctx, client, false); door.Open {
+	if door, _ := decideSetupDoor(ctx, client, false); door.Open {
 		t.Errorf("provisioned: %+v, want shut", door)
 	}
-	if door := decideSetupDoor(ctx, client, true); !door.Open || !door.Reprovision {
+	if door, _ := decideSetupDoor(ctx, client, true); !door.Open || !door.Reprovision {
 		t.Errorf("provisioned with --superuser: %+v, want open to replace", door)
 	}
 
@@ -216,7 +216,7 @@ func TestTheDoorIsDecidedOnceAndShutWhenInDoubt(t *testing.T) {
 	backend.status = http.StatusInternalServerError
 	backend.mu.Unlock()
 	start := time.Now()
-	if door := decideSetupDoor(ctx, client, false); door.Open {
+	if door, _ := decideSetupDoor(ctx, client, false); door.Open {
 		t.Error("a broken backend opened the door")
 	}
 	if time.Since(start) > 2*time.Second {
@@ -318,5 +318,63 @@ func TestTheCallbackIsTheOneTheBackendRegisters(t *testing.T) {
 	}
 	if _, pattern := mux.Handler(httptest.NewRequest(http.MethodGet, staffauth.CallbackPath, nil)); !strings.HasSuffix(pattern, staffauth.CallbackPath) {
 		t.Errorf("nothing is served at the registered callback: pattern %q", pattern)
+	}
+}
+
+// TestAConsoleOlderOrNewerThanItsBackendKeepsAsking: found on a cluster. The
+// console was updated and the backend not yet, so asking whether setup was
+// needed answered 404 — and a console that decided once kept its wizard shut
+// until somebody restarted it, after the backend had long been updated too.
+// It asks again until it hears, and opens the wizard then.
+func TestAConsoleOlderOrNewerThanItsBackendKeepsAsking(t *testing.T) {
+	old := settleRetryInterval
+	settleRetryInterval = 20 * time.Millisecond
+	t.Cleanup(func() { settleRetryInterval = old })
+
+	backend := newSetupBackend(t)
+	backend.mu.Lock()
+	backend.status = http.StatusNotFound // the old backend: no such route
+	backend.mu.Unlock()
+
+	c := setupConsole(t, backend.server.URL, SetupDoor{})
+	maintenance := http.NewServeMux()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan struct{})
+	go func() { c.settle(ctx, maintenance, false); close(done) }()
+
+	time.Sleep(100 * time.Millisecond)
+	if _, pattern := maintenance.Handler(httptest.NewRequest(http.MethodGet, SetupPath, nil)); pattern != "" {
+		t.Fatal("the wizard opened on an answer that was not \"nothing is configured\"")
+	}
+
+	// The backend is updated.
+	backend.mu.Lock()
+	backend.status = 0
+	backend.mu.Unlock()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the console stopped asking, or never settled")
+	}
+	recorder := httptest.NewRecorder()
+	maintenance.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, SetupPath, nil))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("the wizard after the backend was updated = %d, want 200", recorder.Code)
+	}
+}
+
+// TestTheCauseIsNamed: "404 Not Found" alone sent an operator looking at the
+// wrong half.
+func TestTheCauseIsNamed(t *testing.T) {
+	for status, want := range map[int]string{
+		http.StatusNotFound:           "older than this console",
+		http.StatusUnauthorized:       "--staff-token is not the same",
+		http.StatusServiceUnavailable: "no --staff-token",
+	} {
+		if got := whyUndecided(&apiclient.Error{Status: status}); !strings.Contains(got, want) {
+			t.Errorf("%d: %q, want it to say %q", status, got, want)
+		}
 	}
 }

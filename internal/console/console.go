@@ -134,8 +134,9 @@ type console struct {
 
 	// setupDoor is whether the setup wizard is offered on the maintenance
 	// port, and whether it would replace an identity provider. See setup.go.
-	setupMu   sync.Mutex
-	setupDoor SetupDoor
+	setupMu         sync.Mutex
+	setupDoor       SetupDoor
+	setupRegistered bool
 
 	// authentikURL is what the wizard offers as the Authentik instance:
 	// --oidc-issuer (SCHMERZ_OIDC_ISSUER), cut back to the instance.
@@ -241,16 +242,16 @@ func Setup(svc *service.Service, common config.Common) error {
 				"replace this console's identity provider — restart without --superuser when done")
 		}
 
-		// Whether to offer the wizard is decided once, at startup: a route
-		// that came and went with the backend's availability would be a setup
-		// page that opened itself whenever the backend had a bad second.
-		c.setupDoor = decideSetupDoor(context.Background(), backend.AsConsole(staffConfig.Token), oidcConfig.Superuser)
-		if err := c.connectIdentityProvider(context.Background()); err != nil {
-			// Locked rather than stopped: the wizard is still served, and
-			// every page says what is wrong.
-			log.Error().Err(err).Msg("cannot connect to the identity provider: nobody can sign in")
-		}
-		c.registerSetup(svc.MaintenanceMux())
+		// Whether to offer the wizard, and the sign-in, are settled in the
+		// background: the console starts locked either way, and keeps asking
+		// the backend until it has an answer — see settle. Stopped with the
+		// service, so it never outlives the backend it asks.
+		settleCtx, stopSettling := context.WithCancel(context.Background())
+		svc.OnShutdown(func(context.Context) error {
+			stopSettling()
+			return nil
+		})
+		go c.settle(settleCtx, svc.MaintenanceMux(), oidcConfig.Superuser)
 	}
 
 	// Every page this service serves carries a Content-Security-Policy, and

@@ -97,42 +97,128 @@ func starting(err error) bool {
 	return errors.As(err, &dial)
 }
 
-// decideSetupDoor works out whether the wizard belongs on this console.
+// decideSetupDoor works out whether the wizard belongs on this console. An
+// error means it could not tell, and the door stays shut for now.
 //
-// A backend that cannot be reached keeps the door shut: an unreachable backend
-// must never be a way to make a provisioned console offer its setup page
-// again. With --superuser it is opened anyway — the operator is at a terminal
-// having asked for exactly that, and the backend still refuses an overwrite
-// that does not say so.
-func decideSetupDoor(ctx context.Context, backend *apiclient.Client, superuser bool) SetupDoor {
+// # Shut until the backend positively says otherwise
+//
+// The wizard opens on exactly one answer: the backend saying no identity
+// provider is configured. Nothing else can produce that answer — not a
+// backend that cannot be reached, not one that refuses, not one that has no
+// such route — so a backend having a bad moment can never reopen setup on a
+// site that is configured. With --superuser it is opened anyway: the operator
+// is at a terminal having asked for exactly that, and the backend still
+// refuses an overwrite that does not say so.
+func decideSetupDoor(ctx context.Context, backend *apiclient.Client, superuser bool) (SetupDoor, error) {
 	settings, err := askWithRetry(ctx, backend)
 	if err != nil {
 		if superuser {
 			log.Warn().Err(err).Msg("cannot ask the backend whether an identity provider is configured; " +
 				"--superuser was given, so the setup wizard is open anyway")
-			return SetupDoor{Open: true, Reprovision: true}
+			return SetupDoor{Open: true, Reprovision: true}, nil
 		}
-		log.Error().Err(err).Msg("cannot ask the backend whether an identity provider is configured; " +
-			"assuming one is and leaving the setup wizard closed")
-		return SetupDoor{}
+		return SetupDoor{}, err
 	}
 
 	switch {
 	case !settings.Provisioned:
 		log.Warn().Msg("no identity provider is configured: the setup wizard is open on the " +
 			"maintenance port, which is not published — reach it through the cluster")
-		return SetupDoor{Open: true}
+		return SetupDoor{Open: true}, nil
 	case superuser:
 		log.Warn().Str("instance", settings.InstanceURL).Msg(
 			"SUPERUSER MODE: an identity provider is configured and the setup wizard is open to replace it")
-		return SetupDoor{Open: true, Reprovision: true}
+		return SetupDoor{Open: true, Reprovision: true}, nil
 	default:
 		log.Info().Str("instance", settings.InstanceURL).
 			Msg("identity provider configured; the setup wizard is not registered")
-		return SetupDoor{}
+		return SetupDoor{}, nil
 	}
 }
 
+// whyUndecided says, in an operator's words, why the backend could not be
+// asked — the cause, where the error alone points at the wrong half.
+func whyUndecided(err error) string {
+	switch status := apiclient.StatusOf(err); {
+	case status == http.StatusNotFound:
+		// The backend answered and has no such route. Found on a cluster
+		// where the console had been updated and the backend not yet: the
+		// error said "404 Not Found" and nothing else.
+		return "the backend has no /v1/console/auth: it is older than this console, or --backend-url " +
+			"points at another service — deploy both from the same release"
+	case status == http.StatusUnauthorized:
+		return "the backend refused the console: --staff-token is not the same on both"
+	case status == http.StatusServiceUnavailable:
+		return "the backend has no --staff-token, so it believes no console — set the same one on both"
+	case starting(err):
+		return "the backend cannot be reached at --backend-url"
+	}
+	return "the backend could not answer"
+}
+
+// settleRetryInterval is how often an undecided console asks again. A
+// variable so a test need not wait for it.
+var settleRetryInterval = 15 * time.Second
+
+// settle finishes what startup could not: deciding whether to offer the
+// wizard, and connecting the sign-in.
+//
+// # Why it keeps asking rather than giving up
+//
+// Startup asks once, and a Kubernetes rollout is exactly when the answer is
+// unavailable: the new console starts while an old backend still answers —
+// without the route, or with another token — or before the new one is up. A
+// console that decided once would keep its wizard shut and its sign-in
+// unconnected until somebody thought to restart it, with nothing on the page
+// to say so. So it asks again until it has an answer, and acts on it then.
+// The rule above still holds: the wizard opens only when the backend says
+// nothing is configured.
+func (c *console) settle(ctx context.Context, maintenance *http.ServeMux, superuser bool) {
+	backend := c.backend.AsConsole(c.staffToken)
+	decided := false
+	for attempt := 1; ; attempt++ {
+		if !decided {
+			door, err := decideSetupDoor(ctx, backend, superuser)
+			if err == nil {
+				decided = true
+				c.setupMu.Lock()
+				c.setupDoor = door
+				c.setupMu.Unlock()
+				c.registerSetup(maintenance)
+			} else if attempt == 1 {
+				log.Error().Err(err).Str("cause", whyUndecided(err)).
+					Msg("cannot ask the backend whether an identity provider is configured; " +
+						"the setup wizard stays closed and the console keeps asking")
+			} else {
+				log.Debug().Err(err).Msg("still cannot ask the backend whether an identity provider is configured")
+			}
+		}
+
+		if c.currentSignIn() == nil {
+			if err := c.connectIdentityProvider(ctx); err != nil {
+				if attempt == 1 {
+					log.Error().Err(err).Str("cause", whyUndecided(err)).
+						Msg("cannot connect to the identity provider: nobody can sign in yet, and the console keeps trying")
+				}
+			}
+		}
+
+		// Done once it knows, and either signs people in or offers the wizard
+		// that will make it.
+		if decided && (c.currentSignIn() != nil || c.door().Open) {
+			if attempt > 1 {
+				log.Info().Msg("the console has heard from the backend: sign-in and setup are settled")
+			}
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(settleRetryInterval):
+		}
+	}
+}
 func (c *console) door() SetupDoor {
 	c.setupMu.Lock()
 	defer c.setupMu.Unlock()
@@ -146,6 +232,15 @@ func (c *console) door() SetupDoor {
 // a pasted credential. So the wizard wraps itself.
 func (c *console) registerSetup(mux *http.ServeMux) {
 	if !c.door().Open {
+		return
+	}
+	// Once: the door can open after startup, and a pattern registered
+	// twice panics.
+	c.setupMu.Lock()
+	registered := c.setupRegistered
+	c.setupRegistered = true
+	c.setupMu.Unlock()
+	if registered {
 		return
 	}
 	headers := web.SecurityHeaders()
