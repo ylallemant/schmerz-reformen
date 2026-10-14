@@ -208,9 +208,26 @@ func Setup(svc *service.Service, common config.Common) error {
 	geocodeConfig := config.LoadGeocode()
 	var geocoder geocode.Geocoder
 	if geocodeConfig.Enabled {
-		geocoder = geocode.New(geocodeConfig.Endpoint,
-			geocodeConfig.UserAgent(svc.Version()))
-		log.Info().Str("endpoint", geocodeConfig.Endpoint).
+		// Every provider this deployment configured, in one queue.
+		//
+		// Nominatim needs no credential, so it answers whenever geocoding is
+		// on at all. Everybody else is in the queue because a key for them was
+		// configured and absent from it because one was not — one fact, no
+		// second switch to disagree with it.
+		providers := []geocode.Provider{
+			geocode.NewNominatim(geocodeConfig.Endpoint,
+				geocodeConfig.UserAgent(svc.Version())),
+		}
+		providers = append(providers, geocode.Keyed(geocodeConfig.Keys)...)
+
+		service := geocode.NewService(geocodeConfig.Limits, providers...)
+		geocoder = service
+		// What each provider will allow today, said once at startup: it is the
+		// number an operator needs when places stop being named in the evening.
+		log.Info().
+			Strs("providers", service.Providers()).
+			Interface("remaining_today", service.Remaining()).
+			Str("endpoint", geocodeConfig.Endpoint).
 			Msg("reverse geocoding enabled")
 	}
 

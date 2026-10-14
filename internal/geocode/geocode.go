@@ -26,7 +26,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -41,8 +40,16 @@ import (
 // Changing that is configuration, never a code change.
 const DefaultEndpoint = "https://nominatim.openstreetmap.org"
 
-// minInterval is the gap the public instance's usage policy requires.
-const minInterval = time.Second
+// nominatimPolicy is what the public instance's usage policy allows.
+//
+// One request a second is the tightest rate of any provider here, which is why
+// a second provider exists. The daily figure is **86,400** — a second's worth
+// for every second of the day — which is to say no daily limit at all, stated
+// in the same units as every other provider rather than as a zero meaning
+// something different. A number that cannot bind is easier to read than a
+// special case, and it keeps `Remaining()` answering with a count for every
+// provider instead of a sentinel for one.
+var nominatimPolicy = Limits{PerSecond: 1, PerDay: 86400}
 
 // lookupTimeout bounds one call. A place name is a nicety; saving an action
 // must never wait on it.
@@ -64,25 +71,34 @@ type Geocoder interface {
 	Reverse(ctx context.Context, lat, lng float64, precision uint) (Place, error)
 }
 
-// Nominatim is the OpenStreetMap-backed implementation.
+// Nominatim is the OpenStreetMap-backed provider.
+//
+// It holds no cache and no rate limiter any more: both moved to Service, which
+// owns them for every provider at once. What is left here is what is actually
+// Nominatim's — its endpoint, the User-Agent its usage policy demands, and the
+// shape of its answer.
 type Nominatim struct {
 	endpoint  string
 	userAgent string
 	http      *http.Client
-
-	// mu guards both the cache and the rate limiter, which are the two pieces
-	// of shared state two concurrent saves touch.
-	mu       sync.Mutex
-	cache    map[string]Place
-	lastCall time.Time
 }
 
-// New returns a geocoder.
+// New returns a service that uses Nominatim and nothing else, at its default
+// limits.
+//
+// Kept because it is the shape every caller and every test already uses, and
+// because one provider is still the common case. A deployment with a Geoapify
+// key, or a plan of its own, builds the service with NewService instead.
+func New(endpoint, userAgent string) *Service {
+	return NewService(nil, NewNominatim(endpoint, userAgent))
+}
+
+// NewNominatim returns the provider on its own.
 //
 // userAgent is required by Nominatim's usage policy: a request without one
 // identifying the application is blocked, and rightly — an anonymous flood is
 // indistinguishable from abuse.
-func New(endpoint, userAgent string) *Nominatim {
+func NewNominatim(endpoint, userAgent string) *Nominatim {
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
@@ -90,37 +106,21 @@ func New(endpoint, userAgent string) *Nominatim {
 		endpoint:  endpoint,
 		userAgent: userAgent,
 		http:      &http.Client{Timeout: lookupTimeout},
-		cache:     map[string]Place{},
 	}
 }
+
+// Name identifies it in logs and configuration.
+func (n *Nominatim) Name() string { return NominatimName }
+
+// Defaults are what the public instance's usage policy allows: one request a
+// second, and no daily ceiling — the policy bounds the rate and forbids heavy
+// use in words rather than in a number. An operator running their own instance
+// raises the rate and still has no daily cap, which is the point of running
+// one.
+func (n *Nominatim) Defaults() Limits { return nominatimPolicy }
 
 // Reverse names the place a point falls in, at the requested granularity.
 func (n *Nominatim) Reverse(ctx context.Context, lat, lng float64, precision uint) (Place, error) {
-	// The cache key is the cell, not the point: everything pinned on the same
-	// town resolves to the same answer, so the second one should not cost a
-	// request. This is also what keeps a busy day inside the rate limit.
-	key := geo.Prefix(geo.Encode(lat, lng), precision) + "/" + strconv.Itoa(int(precision))
-
-	n.mu.Lock()
-	if place, ok := n.cache[key]; ok {
-		n.mu.Unlock()
-		return place, nil
-	}
-	n.mu.Unlock()
-
-	place, err := n.fetch(ctx, lat, lng, precision)
-	if err != nil {
-		return Place{}, err
-	}
-
-	n.mu.Lock()
-	n.cache[key] = place
-	n.mu.Unlock()
-	return place, nil
-}
-
-func (n *Nominatim) fetch(ctx context.Context, lat, lng float64, precision uint) (Place, error) {
-	waited := n.wait(ctx)
 
 	query := url.Values{}
 	query.Set("lat", strconv.FormatFloat(lat, 'f', 6, 64))
@@ -139,7 +139,6 @@ func (n *Nominatim) fetch(ctx context.Context, lat, lng float64, precision uint)
 	log.Trace().
 		Str("url", endpoint).
 		Str("user_agent", n.userAgent).
-		Dur("rate_limit_wait", waited).
 		Msg("nominatim: request")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -172,6 +171,13 @@ func (n *Nominatim) fetch(ctx context.Context, lat, lng float64, precision uint)
 		Str("response_body", string(body)).
 		Msg("nominatim: response")
 
+	// A 429 is reported as itself. The queue treats it differently from an
+	// ordinary failure: backed off rather than retried immediately, and after
+	// five minutes of them taken as the day's allowance being gone — which is
+	// the provider's own count, and the only one that is right across restarts.
+	if refused := rateLimited("nominatim", resp); refused != nil {
+		return Place{}, refused
+	}
 	if resp.StatusCode != http.StatusOK {
 		return Place{}, fmt.Errorf("geocode: nominatim answered %s", resp.Status)
 	}
@@ -215,26 +221,6 @@ func addressKeys(address map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// wait spaces requests out to honour the usage policy, and reports how long it
-// held the call back — a save that felt slow is usually this.
-func (n *Nominatim) wait(ctx context.Context) time.Duration {
-	n.mu.Lock()
-	gap := time.Until(n.lastCall.Add(minInterval))
-	n.lastCall = time.Now().Add(max(gap, 0))
-	n.mu.Unlock()
-
-	if gap <= 0 {
-		return 0
-	}
-	timer := time.NewTimer(gap)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-	}
-	return gap
 }
 
 // label builds the name to show at a given granularity.

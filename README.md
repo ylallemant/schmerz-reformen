@@ -237,6 +237,8 @@ The settings that matter, each available as a flag, an environment variable
 | `timezone` | console, frontend | the zone times are entered and shown in (`Europe/Berlin`) |
 | `push-public-key`, `push-private-key`, `push-subject` | backend | Web Push; optional |
 | `geocode-endpoint`, `geocode-contact` | backend | a Nominatim instance of your own |
+| `geoapify-apikey` | backend | adds Geoapify beside Nominatim; the key is the only switch |
+| `<provider>-per-second`, `<provider>-per-day` | backend | a provider's pace, when your plan differs from its published one (`nominatim`, `geoapify`; 0 keeps the default) |
 
 In Authentik, nothing by hand: start the console, open
 `http://<console>:<maintenance-port>/setup` through the cluster, and paste an
