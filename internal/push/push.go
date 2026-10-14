@@ -25,6 +25,8 @@ import (
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
+
+	"github.com/ylallemant/schmerz-reformen/internal/outbound"
 )
 
 // ErrGone means the endpoint is not there any more.
@@ -89,6 +91,9 @@ type Options struct {
 	// Timeout bounds one delivery. A push service that hangs must not hold a
 	// request that a person is waiting on.
 	Timeout time.Duration
+
+	// UserAgent names this site on every delivery; see internal/outbound.
+	UserAgent string
 }
 
 // Sender delivers payloads.
@@ -105,7 +110,7 @@ func New(opts Options) (*Sender, error) {
 	if opts.Timeout <= 0 {
 		opts.Timeout = 10 * time.Second
 	}
-	return &Sender{opts: opts, client: &http.Client{Timeout: opts.Timeout}}, nil
+	return &Sender{opts: opts, client: outbound.Client(opts.Timeout, opts.UserAgent)}, nil
 }
 
 // GenerateKeys makes a VAPID pair.

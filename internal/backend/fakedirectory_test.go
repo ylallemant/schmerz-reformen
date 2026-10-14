@@ -29,6 +29,9 @@ type fakeDirectory struct {
 	recoveryBound bool
 	hasCert       bool
 
+	// agents are the User-Agents requests arrived with, in order.
+	agents []string
+
 	users  map[int]*fakeUser
 	groups map[string]*fakeGroup // by pk
 	nextPK int
@@ -262,6 +265,7 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/v3")
 	f.calls = append(f.calls, r.Method+" "+path)
 	f.bearers = append(f.bearers, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	f.agents = append(f.agents, r.Header.Get("User-Agent"))
 	var body map[string]any
 	if r.Body != nil {
 		json.NewDecoder(r.Body).Decode(&body) //nolint:errcheck

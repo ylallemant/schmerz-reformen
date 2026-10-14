@@ -26,13 +26,16 @@ func TestGeoapifyNamesAVenueTheWayNominatimDoes(t *testing.T) {
 		mu.Lock()
 		asked = r.URL.Query()
 		mu.Unlock()
+		if agent := r.Header.Get("User-Agent"); agent != "schmerz-reformen/test (a@example.org)" {
+			t.Errorf("User-Agent %q, want this site's", agent)
+		}
 		json.NewEncoder(w).Encode(map[string]any{"results": []map[string]any{{ //nolint:errcheck
 			"name": "Rathaus", "street": "Marktplatz", "housenumber": "2",
 			"suburb": "Altstadt", "city": "Düsseldorf", "country_code": "de",
 		}}})
 	}))
 	t.Cleanup(server.Close)
-	provider := NewGeoapify(server.URL, "a-key")
+	provider := NewGeoapify(server.URL, "a-key", "schmerz-reformen/test (a@example.org)")
 
 	place, err := provider.Reverse(context.Background(), 51.2259, 6.7724, geo.PlacePrecision)
 	if err != nil {

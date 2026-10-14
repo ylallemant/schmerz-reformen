@@ -133,7 +133,7 @@ func TestTheCacheIsSharedAcrossProviders(t *testing.T) {
 func TestNoProviderIsAnAnswerRatherThanAPanic(t *testing.T) {
 	// NewGeoapify returns nil without a key, and a nil provider is skipped
 	// rather than stored — otherwise the queue would call it.
-	service := NewService(nil, NewGeoapify("", ""))
+	service := NewService(nil, NewGeoapify("", "", ""))
 	if got := service.Providers(); len(got) != 0 {
 		t.Errorf("providers = %v, want none", got)
 	}

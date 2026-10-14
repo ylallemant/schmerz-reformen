@@ -174,6 +174,8 @@ func (c *Client) EnsureServiceAccount(ctx context.Context, appName string) (Serv
 	// Tried before it is trusted: what it will be asked on every request.
 	trial, err := New(c.InstanceURL(), token.Key)
 	if err == nil {
+		// Under the same name as every other request.
+		trial.http = c.http
 		_, err = trial.UserByUsername(ctx, username)
 	}
 	if err == nil {

@@ -14,7 +14,6 @@ import (
 const (
 	KeyGeocodeEnabled  = "geocode-enabled"
 	KeyGeocodeEndpoint = "geocode-endpoint"
-	KeyGeocodeContact  = "geocode-contact"
 )
 
 // KeyAPIKey names the setting that enables one geocoding provider.
@@ -56,11 +55,6 @@ type Geocode struct {
 	// so any deployment expecting traffic points this at its own.
 	Endpoint string
 
-	// Contact is an email address or URL put in the User-Agent, which
-	// Nominatim's policy requires so an operator can be reached before being
-	// blocked. It is the operator's address, never an editor's or a reader's.
-	Contact string
-
 	// Keys are the API keys of the providers that need one, by provider name,
 	// and they are what decides which providers the queue has.
 	//
@@ -89,8 +83,6 @@ func RegisterGeocodeFlags(cmd *cobra.Command) {
 	f.Bool(KeyGeocodeEnabled, true, "name pinned locations by reverse geocoding")
 	f.String(KeyGeocodeEndpoint, "https://nominatim.openstreetmap.org",
 		"Nominatim instance; point this at your own for anything but a trial")
-	f.String(KeyGeocodeContact, "",
-		"operator contact put in the User-Agent, as Nominatim's usage policy requires")
 	// Declared from geocode's own registry, so a provider added there arrives
 	// here with its three settings and no edit to this file.
 	for _, provider := range geocode.KeyedNames() {
@@ -112,7 +104,6 @@ func LoadGeocode() Geocode {
 	return Geocode{
 		Enabled:  viper.GetBool(KeyGeocodeEnabled),
 		Endpoint: viper.GetString(KeyGeocodeEndpoint),
-		Contact:  viper.GetString(KeyGeocodeContact),
 
 		Keys:   loadProviderKeys(),
 		Limits: loadProviderLimits(),
@@ -144,15 +135,4 @@ func loadProviderLimits() map[string]geocode.Limits {
 		}
 	}
 	return limits
-}
-
-// UserAgent renders the identification Nominatim requires. A request without
-// one that names the application is refused, and an operator who set no
-// contact still gets a truthful agent rather than a forged one.
-func (g Geocode) UserAgent(version string) string {
-	agent := "schmerz-reformen/" + version
-	if g.Contact != "" {
-		agent += " (" + g.Contact + ")"
-	}
-	return agent
 }

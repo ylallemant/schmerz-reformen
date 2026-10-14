@@ -79,6 +79,8 @@ func Definition() cli.Definition {
 			// What the identity provider's stored credentials are sealed with.
 			config.RegisterSecretFlags(cmd)
 			config.RegisterNotificationFlags(cmd)
+			// How the services this backend calls can reach its operator.
+			config.RegisterOutboundFlags(cmd)
 		},
 		Setup: Setup,
 	}
@@ -140,6 +142,10 @@ type API struct {
 	// onboardings bounds how fast accounts are made from the console's open
 	// join form. See onboarding.go.
 	onboardings *ratelimit.Limiter
+
+	// userAgent is what every request to a third party is made as — the
+	// directory included. See internal/outbound.
+	userAgent string
 
 	// waiting is how many self-made accounts wait, counted at most once a
 	// minute. See onboarding.go.
@@ -213,6 +219,12 @@ func Setup(svc *service.Service, common config.Common) error {
 	}
 	svc.OnShutdown(func(context.Context) error { return objects.Close() })
 
+	// What every request to a third party is made as: this site, its code,
+	// and how to reach whoever runs it. See internal/outbound.
+	outboundConfig := config.LoadOutbound()
+	userAgent := outboundConfig.UserAgent(svc.Version())
+	log.Info().Str("user_agent", userAgent).Msg("outbound requests identify this site")
+
 	geocodeConfig := config.LoadGeocode()
 	var geocoder geocode.Geocoder
 	if geocodeConfig.Enabled {
@@ -223,10 +235,9 @@ func Setup(svc *service.Service, common config.Common) error {
 		// configured and absent from it because one was not — one fact, no
 		// second switch to disagree with it.
 		providers := []geocode.Provider{
-			geocode.NewNominatim(geocodeConfig.Endpoint,
-				geocodeConfig.UserAgent(svc.Version())),
+			geocode.NewNominatim(geocodeConfig.Endpoint, userAgent),
 		}
-		providers = append(providers, geocode.Keyed(geocodeConfig.Keys)...)
+		providers = append(providers, geocode.Keyed(geocodeConfig.Keys, userAgent)...)
 
 		service := geocode.NewService(geocodeConfig.Limits, providers...)
 		geocoder = service
@@ -270,15 +281,22 @@ func Setup(svc *service.Service, common config.Common) error {
 	pushConfig := config.LoadPush()
 	var sender *push.Sender
 	if pushConfig.Configured() {
+		// The VAPID subject is how a push service reaches the operator, which
+		// is what the operator contact is for: used when no subject is set.
+		subject := pushConfig.Subject
+		if subject == "" && outboundConfig.Contact != "" {
+			subject = "mailto:" + outboundConfig.Contact
+		}
 		sender, err = push.New(push.Options{
 			PublicKey:  pushConfig.PublicKey,
 			PrivateKey: pushConfig.PrivateKey,
-			Subject:    pushConfig.Subject,
+			Subject:    subject,
+			UserAgent:  userAgent,
 		})
 		if err != nil {
 			return fmt.Errorf("web push: %w", err)
 		}
-		if pushConfig.Subject == "" {
+		if subject == "" {
 			// VAPID requires it, and it is how a provider tells an operator
 			// their sending is broken rather than silently dropping it.
 			log.Warn().Msg("no --push-subject is set: a push service has no way to reach this operator")
@@ -318,7 +336,8 @@ func Setup(svc *service.Service, common config.Common) error {
 		geocoder:    geocoder,
 		staffToken:  staffConfig.Token,
 		adminGroup:  staffConfig.AdminGroup,
-		directory:   &directory{},
+		directory:   &directory{userAgent: userAgent},
+		userAgent:   userAgent,
 		development: common.Development,
 	}
 

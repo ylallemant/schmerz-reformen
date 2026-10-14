@@ -41,6 +41,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/ylallemant/schmerz-reformen/internal/outbound"
 )
 
 // requestTimeout bounds one call. Generous: an admin is watching a wizard, and
@@ -106,6 +108,14 @@ func New(instanceURL, token string) (*Client, error) {
 		token:   token,
 		http:    &http.Client{Timeout: requestTimeout},
 	}, nil
+}
+
+// WithUserAgent makes every request of this client name the site and its
+// operator — see internal/outbound. Without it requests go out as Go's
+// anonymous default, which a WAF in front of Authentik may ban.
+func (c *Client) WithUserAgent(userAgent string) *Client {
+	c.http = outbound.Client(requestTimeout, userAgent)
+	return c
 }
 
 // InstanceURL is the instance this client speaks to, without the API path. It

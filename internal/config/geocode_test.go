@@ -40,7 +40,7 @@ func TestNoKeyMeansNoProvider(t *testing.T) {
 	if len(cfg.Keys) != 0 {
 		t.Errorf("Keys = %v with nothing configured, want none", cfg.Keys)
 	}
-	if providers := geocode.Keyed(cfg.Keys); len(providers) != 0 {
+	if providers := geocode.Keyed(cfg.Keys, ""); len(providers) != 0 {
 		t.Errorf("built %d providers with no key", len(providers))
 	}
 }
@@ -61,7 +61,7 @@ func TestTheAPIKeyEnvVarEnablesTheProvider(t *testing.T) {
 		t.Fatalf("Keys = %v, want geoapify from the environment", cfg.Keys)
 	}
 
-	providers := geocode.Keyed(cfg.Keys)
+	providers := geocode.Keyed(cfg.Keys, "")
 	if len(providers) != 1 {
 		t.Fatalf("built %d providers, want 1", len(providers))
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -201,5 +202,34 @@ func TestThePayloadCarriesOnlyWhatAServiceWorkerNeeds(t *testing.T) {
 		if _, ok := fields[want]; !ok {
 			t.Errorf("the payload is missing %q", want)
 		}
+	}
+}
+
+// TestADeliveryNamesTheSite: a push service that wants to reach whoever is
+// sending can see who it is, and Go's anonymous default is not sent.
+func TestADeliveryNamesTheSite(t *testing.T) {
+	var agent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agent = r.Header.Get("User-Agent")
+		w.WriteHeader(http.StatusCreated)
+	}))
+	t.Cleanup(server.Close)
+
+	private, public, err := GenerateKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := New(Options{PublicKey: public, PrivateKey: private,
+		Subject: "mailto:operator@example.org", UserAgent: "schmerz-reformen/test (operator@example.org)"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	to := device(t)
+	to.Endpoint = server.URL + "/send/abc"
+	if err := built.Send(context.Background(), to, Payload{Title: "x"}); err != nil {
+		t.Fatalf("Send: %v", err)
+	}
+	if agent != "schmerz-reformen/test (operator@example.org)" {
+		t.Errorf("User-Agent %q, want this site's", agent)
 	}
 }

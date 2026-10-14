@@ -17,7 +17,7 @@ type registration struct {
 
 	// build is nil for a provider that needs no credential. For every other,
 	// it is called with the configured key and returns nil when there is none.
-	build func(endpoint, apiKey string) Provider
+	build func(endpoint, apiKey, userAgent string) Provider
 }
 
 // registry is every provider this build knows.
@@ -102,7 +102,10 @@ func Defaults(name string) Limits {
 // built directly in a test or a tool behave like one built from
 // configuration. Either alone is correct; keep both, because the one that is
 // skipped is always the path somebody added later.
-func Keyed(keys map[string]string) []Provider {
+//
+// userAgent is what every provider's requests are made as; see
+// internal/outbound.
+func Keyed(keys map[string]string, userAgent string) []Provider {
 	providers := make([]Provider, 0, len(keys))
 	for _, name := range KeyedNames() {
 		apiKey := keys[name]
@@ -116,7 +119,7 @@ func Keyed(keys map[string]string) []Provider {
 			// The endpoint is the provider's own: these are commercial
 			// services at one published address, unlike Nominatim, which a
 			// deployment is expected to self-host.
-			if provider := entry.build("", apiKey); provider != nil {
+			if provider := entry.build("", apiKey, userAgent); provider != nil {
 				providers = append(providers, provider)
 			}
 		}

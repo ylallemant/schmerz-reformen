@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+
+	"github.com/ylallemant/schmerz-reformen/internal/outbound"
 )
 
 // GeoapifyEndpoint is the service's own address.
@@ -52,7 +54,9 @@ type Geoapify struct {
 // queue's own `provider == nil` check would pass it through and call a method
 // on nothing. Returning the interface is what makes the absent provider
 // actually absent.
-func NewGeoapify(endpoint, apiKey string) Provider {
+//
+// userAgent names this site on every request; see internal/outbound.
+func NewGeoapify(endpoint, apiKey, userAgent string) Provider {
 	if apiKey == "" {
 		return nil
 	}
@@ -62,7 +66,7 @@ func NewGeoapify(endpoint, apiKey string) Provider {
 	return &Geoapify{
 		endpoint: endpoint,
 		apiKey:   apiKey,
-		http:     &http.Client{Timeout: lookupTimeout},
+		http:     outbound.Client(lookupTimeout, userAgent),
 	}
 }
 

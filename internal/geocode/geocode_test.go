@@ -20,9 +20,10 @@ func nominatimStub(t *testing.T, calls *atomic.Int32, body string) *httptest.Ser
 		calls.Add(1)
 
 		// The usage policy requires an identifying agent; a client that did
-		// not send one would be blocked in production, silently, later.
-		if r.Header.Get("User-Agent") == "" {
-			t.Error("no User-Agent was sent")
+		// not send one would be blocked in production, silently, later. Go's
+		// own default is not one: it names nobody.
+		if agent := r.Header.Get("User-Agent"); agent != "schmerz-reformen/test" {
+			t.Errorf("User-Agent %q, want the one the provider was given", agent)
 		}
 		// Asking for a street is the thing this must never do.
 		if zoom, _ := strconv.Atoi(r.URL.Query().Get("zoom")); zoom > 12 {

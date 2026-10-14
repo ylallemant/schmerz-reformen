@@ -41,6 +41,9 @@ const roleCacheLifetime = time.Minute
 // directory is the backend's connection to Authentik, which appears when the
 // wizard finishes and can change when it is run again.
 type directory struct {
+	// userAgent is what the directory is asked as; see internal/outbound.
+	userAgent string
+
 	mu       sync.RWMutex
 	client   *authentik.Client
 	settings models.AuthSettings
@@ -60,6 +63,7 @@ func (d *directory) connect(settings models.AuthSettings) error {
 	if err != nil {
 		return fmt.Errorf("build the directory client: %w", err)
 	}
+	client.WithUserAgent(d.userAgent)
 
 	d.mu.Lock()
 	d.client = client

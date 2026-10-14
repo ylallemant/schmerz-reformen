@@ -797,3 +797,28 @@ func TestAnEmailIsAWayToBeReached(t *testing.T) {
 	}
 	f.mu.Unlock()
 }
+
+// TestTheDirectoryIsAskedAsThisSite: at setup with the pasted token, through
+// the service account's trial, and afterwards — never as Go's anonymous
+// default, which a WAF in front of Authentik may ban.
+func TestTheDirectoryIsAskedAsThisSite(t *testing.T) {
+	a := newAPI(t)
+	a.userAgent = "schmerz-reformen/test (buero@example.org)"
+	a.directory.userAgent = a.userAgent
+	f := newFakeDirectory(t)
+	provisioned(t, a, f)
+	if _, err := a.staffListPeople(admin(), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.agents) == 0 {
+		t.Fatal("nothing reached the directory")
+	}
+	for i, agent := range f.agents {
+		if agent != a.userAgent {
+			t.Fatalf("request %d (%s) went as %q", i, f.calls[i], agent)
+		}
+	}
+}

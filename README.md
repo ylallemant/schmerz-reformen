@@ -247,7 +247,8 @@ The settings that matter, each available as a flag, an environment variable
 | `storage-url` | backend | where logos are kept: `file://…` or `s3://…` |
 | `timezone` | console, frontend | the zone times are entered and shown in (`Europe/Berlin`) |
 | `push-public-key`, `push-private-key`, `push-subject` | backend | Web Push; optional |
-| `geocode-endpoint`, `geocode-contact` | backend | a Nominatim instance of your own |
+| `geocode-endpoint` | backend | a Nominatim instance of your own |
+| `operator-contact` | backend | how the services the backend calls reach you; in every outbound User-Agent, and the push subject when none is set (default `buero@die-linke-duesseldorf.de` — set your own if you run another installation) |
 | `geoapify-apikey` | backend | adds Geoapify beside Nominatim; the key is the only switch |
 | `<provider>-per-second`, `<provider>-per-day` | backend | a provider's pace, when your plan differs from its published one (`nominatim`, `geoapify`; 0 keeps the default) |
 

@@ -12,14 +12,14 @@ import (
 // not. Two settings for one fact have a state where they disagree, and neither
 // side of that disagreement is visible in any log.
 func TestAKeyIsTheOnlySwitch(t *testing.T) {
-	if providers := Keyed(nil); len(providers) != 0 {
+	if providers := Keyed(nil, ""); len(providers) != 0 {
 		t.Errorf("no keys built %d providers", len(providers))
 	}
-	if providers := Keyed(map[string]string{GeoapifyName: ""}); len(providers) != 0 {
+	if providers := Keyed(map[string]string{GeoapifyName: ""}, ""); len(providers) != 0 {
 		t.Errorf("an empty key built %d providers", len(providers))
 	}
 
-	providers := Keyed(map[string]string{GeoapifyName: "a-key"})
+	providers := Keyed(map[string]string{GeoapifyName: "a-key"}, "")
 	if len(providers) != 1 || providers[0].Name() != GeoapifyName {
 		t.Fatalf("a key built %d providers, want one geoapify", len(providers))
 	}
@@ -33,7 +33,7 @@ func TestAKeyIsTheOnlySwitch(t *testing.T) {
 // on — which would configure its pace under a name nothing reads.
 func TestEveryKeyedProviderActuallyBuilds(t *testing.T) {
 	for _, name := range KeyedNames() {
-		providers := Keyed(map[string]string{name: "a-key"})
+		providers := Keyed(map[string]string{name: "a-key"}, "")
 		if len(providers) != 1 {
 			t.Errorf("%s: a key built %d providers, want 1", name, len(providers))
 			continue
@@ -55,7 +55,7 @@ func TestEveryKeyedProviderActuallyBuilds(t *testing.T) {
 // that was removed, or that the next version adds, must not stop the backend
 // starting over it.
 func TestAKeyForAProviderThisBuildHasNeverHeardOf(t *testing.T) {
-	if providers := Keyed(map[string]string{"cartographers-r-us": "a-key"}); len(providers) != 0 {
+	if providers := Keyed(map[string]string{"cartographers-r-us": "a-key"}, ""); len(providers) != 0 {
 		t.Errorf("an unknown provider built %d providers", len(providers))
 	}
 }

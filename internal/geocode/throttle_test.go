@@ -255,7 +255,7 @@ func TestBothProvidersReportA429AsItself(t *testing.T) {
 
 	providers := []Provider{
 		NewNominatim(server.URL, "schmerz-reformen/test"),
-		NewGeoapify(server.URL, "a-key"),
+		NewGeoapify(server.URL, "a-key", ""),
 	}
 	for _, provider := range providers {
 		_, err := provider.Reverse(context.Background(), 43.3883, -1.6626, 5)

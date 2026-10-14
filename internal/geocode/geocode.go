@@ -31,6 +31,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ylallemant/schmerz-reformen/internal/geo"
+	"github.com/ylallemant/schmerz-reformen/internal/outbound"
 )
 
 // DefaultEndpoint is the public Nominatim instance.
@@ -97,7 +98,7 @@ func New(endpoint, userAgent string) *Service {
 //
 // userAgent is required by Nominatim's usage policy: a request without one
 // identifying the application is blocked, and rightly — an anonymous flood is
-// indistinguishable from abuse.
+// indistinguishable from abuse. See internal/outbound, which sends it.
 func NewNominatim(endpoint, userAgent string) *Nominatim {
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
@@ -105,7 +106,7 @@ func NewNominatim(endpoint, userAgent string) *Nominatim {
 	return &Nominatim{
 		endpoint:  endpoint,
 		userAgent: userAgent,
-		http:      &http.Client{Timeout: lookupTimeout},
+		http:      outbound.Client(lookupTimeout, userAgent),
 	}
 }
 
@@ -145,7 +146,6 @@ func (n *Nominatim) Reverse(ctx context.Context, lat, lng float64, precision uin
 	if err != nil {
 		return Place{}, fmt.Errorf("geocode: build request: %w", err)
 	}
-	req.Header.Set("User-Agent", n.userAgent)
 	req.Header.Set("Accept", "application/json")
 
 	started := time.Now()

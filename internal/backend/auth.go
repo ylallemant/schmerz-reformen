@@ -243,6 +243,7 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 	if err != nil {
 		return nil, huma.Error422UnprocessableEntity(err.Error())
 	}
+	client.WithUserAgent(a.userAgent)
 
 	result, err := provision(ctx, client, consoleURL, appName, firstAdmin{
 		Username: in.Body.AdminUsername, Name: in.Body.AdminName,
