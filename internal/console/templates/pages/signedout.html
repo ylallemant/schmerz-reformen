@@ -4,9 +4,14 @@
   {{/* The account is named: the commonest cause is being signed in to the
        identity provider as somebody else, and "you hold no role" alone sends
        people looking for a missing role instead. */}}
+  {{ if .Pending }}
+  <h1>{{ .T "auth.pending_title" }}</h1>
+  <p class="lede">{{ .Tf "auth.pending" "Account" .Refused }}</p>
+  {{ else }}
   <h1>{{ .T "auth.failed_title" }}</h1>
   <p class="lede">{{ .Tf "auth.refused" "Account" .Refused }}</p>
   <p class="section-note">{{ .T "auth.refused_hint" }}</p>
+  {{ end }}
   {{ else if eq .Reason "auth.locked" }}
   <h1>{{ .T "auth.locked_title" }}</h1>
   <p class="lede">{{ .T "auth.locked" }}</p>
@@ -22,6 +27,9 @@
   {{ end }}
   {{ if ne .Reason "auth.locked" }}
   <p><a class="button" href="/auth/login">{{ .T "auth.sign_in" }}</a></p>
+  {{ end }}
+  {{ if .JoinDomains }}
+  <p class="section-note"><a class="link" href="/auth/join">{{ .T "auth.join" }}</a></p>
   {{ end }}
 </div>
 {{end}}

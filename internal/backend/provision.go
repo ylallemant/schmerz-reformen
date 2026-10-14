@@ -270,6 +270,10 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 	if _, err := client.EnsureGroup(ctx, models.UsersGroupName(appName)); err != nil {
 		return result, err
 	}
+	// And the one self-made accounts wait in — not a role, see onboarding.go.
+	if _, err := client.EnsureGroup(ctx, models.PendingGroupName(appName)); err != nil {
+		return result, err
+	}
 
 	if result.RecoveryReady {
 		if link, err := client.RecoveryLink(ctx, admin.PK); err != nil {

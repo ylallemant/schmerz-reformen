@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ylallemant/schmerz-reformen/internal/apiclient"
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
+	"github.com/ylallemant/schmerz-reformen/internal/web"
 )
 
 func testSealer(t *testing.T, secret string) *sealer {
@@ -223,6 +225,37 @@ func TestARedirectKeepsItsFragment(t *testing.T) {
 		}
 		if recorder.Code != http.StatusSeeOther {
 			t.Errorf("redirect(%q) = %d, want 303 so a reload does not post again", target, recorder.Code)
+		}
+	}
+}
+
+// TestAnAccountThatWaitsIsToldSoAtTheDoor: an account made from the join page
+// and not let in yet hears that it waits, rather than that it holds no role —
+// which would send its owner looking for something to fix.
+func TestAnAccountThatWaitsIsToldSoAtTheDoor(t *testing.T) {
+	backend, _ := fakeBackend(t, false)
+	c := testConsole(t, backend.URL)
+	anna := staffauth.Identity{Subject: "sub-anna", Username: "anna@sozialratschlag.de", Name: "Anna"}
+
+	for _, tc := range []struct {
+		profile    apiclient.StaffProfile
+		want, lose string
+	}{
+		{apiclient.StaffProfile{Pending: true}, "wartet darauf", "keine Rolle"},
+		{apiclient.StaffProfile{}, `href="/auth/join"`, "wartet darauf"},
+	} {
+		request := httptest.NewRequest(http.MethodGet, "/auth/callback", nil)
+		request.AddCookie(&http.Cookie{Name: web.LanguageCookie, Value: "de"})
+		recorder := httptest.NewRecorder()
+		c.renderRefused(recorder, request, anna, tc.profile)
+
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusForbidden || !strings.Contains(body, "anna@sozialratschlag.de") {
+			t.Errorf("pending %v: status %d, account named %v", tc.profile.Pending, recorder.Code,
+				strings.Contains(body, "anna@sozialratschlag.de"))
+		}
+		if !strings.Contains(body, tc.want) || strings.Contains(body, tc.lose) {
+			t.Errorf("pending %v: want %q and not %q", tc.profile.Pending, tc.want, tc.lose)
 		}
 	}
 }

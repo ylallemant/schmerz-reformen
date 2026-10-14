@@ -23,6 +23,9 @@ type AuthSettings struct {
 	AdminGroupName string     `json:"admin_group_name,omitempty"`
 	ProvisionedBy  string     `json:"provisioned_by,omitempty"`
 	ProvisionedAt  *time.Time `json:"provisioned_at,omitempty"`
+
+	// OnboardingDomains may make their own account; empty is nobody.
+	OnboardingDomains []string `json:"onboarding_domains"`
 }
 
 // AuthSettings reads it. Needs a client made with AsConsole.
@@ -51,6 +54,9 @@ type ProvisionRequest struct {
 	AdminUsername string `json:"admin_username,omitempty"`
 	AdminName     string `json:"admin_name,omitempty"`
 	Reprovision   bool   `json:"reprovision,omitempty"`
+
+	// OnboardingDomains as typed: one per line or separated by commas.
+	OnboardingDomains string `json:"onboarding_domains,omitempty"`
 }
 
 // Provisioning is what the backend did with it.
@@ -112,6 +118,10 @@ type People struct {
 	AdminGroup    string   `json:"admin_group"`
 	UsersGroup    string   `json:"users_group"`
 	RecoveryReady bool     `json:"recovery_ready"`
+
+	// Pending made their own account and wait to be let in.
+	Pending           []User   `json:"pending"`
+	OnboardingDomains []string `json:"onboarding_domains"`
 }
 
 // People lists who may use the console. Administrators only.

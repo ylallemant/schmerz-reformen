@@ -99,6 +99,12 @@ type AuthSettings struct {
 	// membership can be changed without looking it up by name.
 	AdminGroup string `gorm:"size:64" json:"admin_group,omitempty"`
 
+	// OnboardingDomains are the domains whose addresses may make their own
+	// console account, waiting for approval: "sozialratschlag.de, ...". Set in
+	// the setup wizard and changed by the site's administrators. Empty is
+	// nobody; see onboarding.go.
+	OnboardingDomains string `gorm:"size:2000" json:"onboarding_domains,omitempty"`
+
 	// ProvisionedAt and ProvisionedBy record who opened the door and when.
 	// The wizard runs before anybody can be identified by OIDC, so it cannot
 	// be audited the way every later change is; the Authentik account whose

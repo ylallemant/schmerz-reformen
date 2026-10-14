@@ -31,6 +31,9 @@ type homePage struct {
 
 	// Organisations are those the editor administers or belongs to.
 	Organisations []apiclient.Organisation
+
+	// Waiting is, for an administrator, how many self-made accounts wait.
+	Waiting int
 }
 
 func (c *console) home(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +46,7 @@ func (c *console) home(w http.ResponseWriter, r *http.Request) {
 	data := homePage{page: c.newPage(r, "home.title")}
 	data.Collectives = profile.Collectives
 	data.Organisations = profile.Organisations
+	data.Waiting = profile.Waiting
 	c.renderer.Render(w, http.StatusOK, "home", data)
 }
 

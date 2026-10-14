@@ -139,3 +139,74 @@ func TestAnEmailIsSentOnlyWhenItChanged(t *testing.T) {
 		t.Error("a collective's people are not shown with their address")
 	}
 }
+
+// TestSomebodyAtAnOnboardingDomainJoinsAndWaits: the join page is reachable
+// before signing in, shows the way in once and not in an address, and the
+// People page lets them in or turns them away.
+func TestSomebodyAtAnOnboardingDomainJoinsAndWaits(t *testing.T) {
+	backend, log := fakeBackend(t, false)
+	console := served(t, backend.URL)
+
+	_, rendered := get(t, console, "/auth/signed-out#de")
+	if !strings.Contains(rendered, `href="/auth/join"`) {
+		t.Error("the signed-out page does not offer to join")
+	}
+	_, rendered = get(t, console, "/auth/join")
+	if !strings.Contains(rendered, "@sozialratschlag.de") || !strings.Contains(rendered, `action="/auth/join"`) {
+		t.Error("the join page does not name the domain or offer the form")
+	}
+
+	response, rendered := post(t, console, "/auth/join", url.Values{
+		"email": {" anna@sozialratschlag.de "}, "name": {"Anna"},
+	})
+	if response.StatusCode != http.StatusOK || response.Header.Get("Location") != "" {
+		t.Fatalf("joining = %d to %q, want the page itself", response.StatusCode, response.Header.Get("Location"))
+	}
+	if !strings.Contains(rendered, "https://auth.example/if/flow/recovery/?token=joined") {
+		t.Error("the way in is not shown")
+	}
+	if response.Header.Get("Cache-Control") != "no-store" {
+		t.Error("the page carrying a way in may be cached")
+	}
+	if sent, _ := log.last(http.MethodPost, "/v1/console/onboarding"); sent.Body["email"] != "anna@sozialratschlag.de" ||
+		sent.Body["name"] != "Anna" || sent.Token != "the-shared-secret" {
+		t.Errorf("sent %v with token %q", sent.Body, sent.Token)
+	}
+
+	_, rendered = get(t, console, "/#de")
+	if !strings.Contains(rendered, `href="/settings/people#waiting"`) {
+		t.Error("an administrator's home page does not say people are waiting")
+	}
+
+	for action, method := range map[string]string{"approve": http.MethodPut, "refuse": http.MethodDelete} {
+		response, _ := post(t, console, "/settings/people", url.Values{
+			"action": {action}, "pk": {"9"}, "username": {"anna@sozialratschlag.de"},
+		})
+		if response.StatusCode != http.StatusSeeOther {
+			t.Errorf("%s = %d", action, response.StatusCode)
+		}
+		if _, sent := log.last(method, "/v1/staff/people/9/approval"); !sent {
+			t.Errorf("%s was not sent", action)
+		}
+	}
+	post(t, console, "/settings/people", url.Values{"action": {"domains"}, "domains": {"sozialratschlag.de, verdi.de"}})
+	if sent, _ := log.last(http.MethodPut, "/v1/staff/onboarding"); sent.Body["domains"] != "sozialratschlag.de, verdi.de" {
+		t.Errorf("domains sent as %v", sent.Body)
+	}
+}
+
+// TestARefusedJoinKeepsWhatWasTyped, with the backend's reason.
+func TestARefusedJoinKeepsWhatWasTyped(t *testing.T) {
+	backend, _ := fakeBackend(t, true)
+	response, rendered := post(t, served(t, backend.URL), "/auth/join", url.Values{
+		"email": {"anna@verdi.de"}, "name": {"Anna"},
+	})
+	if response.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	for _, want := range []string{`value="anna@verdi.de"`, `value="Anna"`, "the title is too long"} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("the refused form lost %s", want)
+		}
+	}
+}

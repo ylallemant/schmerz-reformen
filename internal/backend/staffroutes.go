@@ -62,6 +62,13 @@ type StaffMeOutput struct {
 		// Somebody the directory knows and this site gave nothing is refused
 		// at the door.
 		Allowed bool `json:"allowed"`
+
+		// Pending says they made their own account and wait to be let in,
+		// so the door can say that rather than "no role".
+		Pending bool `json:"pending"`
+
+		// Waiting is, for an administrator, how many such accounts wait.
+		Waiting int `json:"waiting,omitempty"`
 	}
 }
 
@@ -94,6 +101,14 @@ func (a *API) staffMe(ctx context.Context, _ *struct{}) (*StaffMeOutput, error) 
 	}
 	out.Body.Allowed = who.Admin || slices.Contains(who.Groups, a.usersGroup()) ||
 		len(out.Body.Collectives) > 0 || len(out.Body.Organisations) > 0
+	out.Body.Pending = !out.Body.Allowed && slices.Contains(who.Groups, a.pendingGroup())
+
+	// Said on an administrator's home page, which is the only place anybody
+	// would notice. A directory that cannot answer costs the number, not the
+	// page.
+	if who.Admin {
+		out.Body.Waiting = a.waiting.count(ctx, a)
+	}
 	return out, nil
 }
 

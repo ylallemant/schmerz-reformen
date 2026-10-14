@@ -42,6 +42,11 @@ type StaffProfile struct {
 
 	// Allowed says they may use the console at all.
 	Allowed bool `json:"allowed"`
+
+	// Pending says they made their own account and wait to be let in;
+	// Waiting is, for an administrator, how many do.
+	Pending bool `json:"pending"`
+	Waiting int  `json:"waiting,omitempty"`
 }
 
 // StaffMe returns what the signed-in editor may do.

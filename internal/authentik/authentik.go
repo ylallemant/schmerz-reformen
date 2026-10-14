@@ -847,6 +847,36 @@ func (c *Client) SetEmail(ctx context.Context, pk int, email string) error {
 	return nil
 }
 
+// UsersByEmail finds every account carrying an address, whatever its
+// username. Compared exactly, case aside: Authentik's filter is a lookup, and
+// an address is checked here rather than trusted to match the way it was
+// asked.
+func (c *Client) UsersByEmail(ctx context.Context, email string) ([]User, error) {
+	var found page[User]
+	path := "/core/users/?email=" + url.QueryEscape(email)
+	if err := c.do(ctx, http.MethodGet, path, nil, &found); err != nil {
+		return nil, err
+	}
+	var users []User
+	for _, person := range found.Results {
+		if strings.EqualFold(person.Email, email) {
+			users = append(users, person)
+		}
+	}
+	return users, nil
+}
+
+// Deactivate stops an account signing in anywhere. Only that: its name, its
+// groups and its credentials stay, so an operator can look at it and
+// reactivate it in Authentik if it was a mistake.
+func (c *Client) Deactivate(ctx context.Context, pk int) error {
+	path := fmt.Sprintf("/core/users/%d/", pk)
+	if err := c.do(ctx, http.MethodPatch, path, map[string]any{"is_active": false}, nil); err != nil {
+		return fmt.Errorf("deactivate user %d: %w", pk, err)
+	}
+	return nil
+}
+
 // UserByPK finds one person by their key — what a picker in the console
 // sends.
 func (c *Client) UserByPK(ctx context.Context, pk int) (User, error) {

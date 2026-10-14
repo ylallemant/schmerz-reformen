@@ -205,6 +205,17 @@ func (f *fakeDirectory) called(prefix string) int {
 	return count
 }
 
+// groupNames lists every group the directory has, by name.
+func (f *fakeDirectory) groupNames() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var names []string
+	for _, group := range f.groups {
+		names = append(names, group.Name)
+	}
+	return names
+}
+
 // userNamed finds an account by username.
 func (f *fakeDirectory) userNamed(username string) *fakeUser {
 	f.mu.Lock()
@@ -284,6 +295,9 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 			if name := query.Get("username"); name != "" && user.Username != name {
 				continue
 			}
+			if email := query.Get("email"); email != "" && user.Email != email {
+				continue
+			}
 			if group := query.Get("groups_by_name"); group != "" {
 				in := false
 				for _, pk := range user.Groups {
@@ -314,12 +328,15 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for key := range body {
-			if key != "email" {
-				f.t.Errorf("a user's %q was changed; only the email may be", key)
+			if key != "email" && key != "is_active" {
+				f.t.Errorf("a user's %q was changed; only the email and whether it is active may be", key)
 			}
 		}
 		if email, ok := body["email"].(string); ok {
 			user.Email = email
+		}
+		if active, ok := body["is_active"].(bool); ok {
+			user.Active = active
 		}
 		answer(200, f.userJSON(user))
 

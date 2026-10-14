@@ -122,6 +122,7 @@ func (c *console) registerAuthRoutes(mux *http.ServeMux) {
 	// would be followed by every prefetcher that touches the page.
 	mux.HandleFunc("POST /auth/logout", c.logout)
 	mux.Handle("GET /auth/signed-out", c.localization.Middleware(http.HandlerFunc(c.signedOut)))
+	c.registerJoinRoutes(mux)
 }
 
 // login starts a sign-in: three fresh secrets into a short-lived cookie, and
@@ -257,15 +258,9 @@ func (c *console) callback(w http.ResponseWriter, r *http.Request) {
 		// site up, say — and "you hold no role" alone sends them looking for
 		// a missing role rather than at the account they are using. It leaks
 		// nothing: they have just proved they hold that account.
-		log.Warn().Str("username", identity.Username).Msg("console sign-in refused: the account holds no role here")
-		c.inLanguage(w, r, func(w http.ResponseWriter, r *http.Request) {
-			data := signedOutPage{page: c.newPage(r, "auth.failed_title")}
-			data.Refused = identity.Username
-			if data.Refused == "" {
-				data.Refused = identity.Name
-			}
-			c.renderer.Render(w, http.StatusForbidden, "signedout", data)
-		})
+		log.Warn().Str("username", identity.Username).Bool("pending", profile.Pending).
+			Msg("console sign-in refused: the account holds no role here")
+		c.renderRefused(w, r, identity, profile)
 		return
 	}
 	identity.Groups = profile.Groups
@@ -284,6 +279,25 @@ func (c *console) callback(w http.ResponseWriter, r *http.Request) {
 		Msg("groups the directory reported")
 
 	http.Redirect(w, r, safeNext(started.Next), http.StatusSeeOther)
+}
+
+// renderRefused tells somebody who signed in perfectly well that they hold no
+// role here — or, for an account they made themselves, that it waits to be
+// let in, which is what they need to hear instead of being sent to look for
+// a missing role.
+func (c *console) renderRefused(w http.ResponseWriter, r *http.Request, identity staffauth.Identity, profile apiclient.StaffProfile) {
+	c.inLanguage(w, r, func(w http.ResponseWriter, r *http.Request) {
+		data := signedOutPage{page: c.newPage(r, "auth.failed_title")}
+		data.Refused = identity.Username
+		if data.Refused == "" {
+			data.Refused = identity.Name
+		}
+		data.Pending = profile.Pending
+		if !data.Pending {
+			data.JoinDomains = c.joinDomains(r.Context())
+		}
+		c.renderer.Render(w, http.StatusForbidden, "signedout", data)
+	})
 }
 
 // identityOfToken reads who signed in out of a verified token: who they are,
@@ -352,6 +366,14 @@ type signedOutPage struct {
 
 	// Reason is a catalogue key for a failure worth saying more about.
 	Reason string
+
+	// Pending says the account that signed in made itself and waits to be
+	// let in.
+	Pending bool
+
+	// JoinDomains, when there are any, are offered: somebody with no account
+	// at one of them can make their own.
+	JoinDomains []string
 }
 
 // renderSignInFailure says why a sign-in did not work, when it is something
@@ -387,6 +409,7 @@ func (c *console) renderLocked(w http.ResponseWriter, r *http.Request) {
 func (c *console) signedOut(w http.ResponseWriter, r *http.Request) {
 	data := signedOutPage{page: c.newPage(r, "auth.signed_out_title")}
 	data.Failed = r.URL.Query().Get("failed") != ""
+	data.JoinDomains = c.joinDomains(r.Context())
 	c.renderer.Render(w, http.StatusOK, "signedout", data)
 }
 

@@ -163,6 +163,18 @@
       <input type="text" id="admin_name" name="admin_name" value="{{ .AdminName }}">
     </fieldset>
 
+    <label for="onboarding_domains">Domains that may join by themselves</label>
+    <input type="text" id="onboarding_domains" name="onboarding_domains" autocomplete="off"
+           placeholder="sozialratschlag.de" value="{{ .OnboardingDomains }}">
+    <p class="hint">
+      Optional; separate several with commas. Somebody with an address at one of these can make
+      their own console account from <code>{{ .ConsoleURL }}/auth/join</code> and is shown their
+      way in at once. <strong>Nothing proves the address is theirs</strong> — nothing is emailed —
+      so the account waits in <code>{{ .AppName }}-pending</code>, outside every role, until a site
+      administrator lets it in from the console's people page. Leave empty for nobody; it can be
+      changed there later.
+    </p>
+
     <label for="console_url">This console's public address</label>
     <input type="url" id="console_url" name="console_url" required value="{{ .ConsoleURL }}">
     <p class="hint">The sign-in redirect is registered as
@@ -177,7 +189,8 @@
 
   <div class="notice">
     <p>What this creates in your directory: an OAuth2 provider, an application, the groups
-       <code>{{ .AppName }}-admins</code> and <code>{{ .AppName }}-users</code>, a service account
+       <code>{{ .AppName }}-admins</code>, <code>{{ .AppName }}-users</code> and
+       <code>{{ .AppName }}-pending</code>, a service account
        <code>{{ .AppName }}-service</code> with a role holding only what the backend needs and a
        token of its own, and — only if your Authentik has none — a recovery flow, bound to the
        default brand only if the brand has none either. Each collective and organisation gets

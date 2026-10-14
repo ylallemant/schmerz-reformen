@@ -132,7 +132,7 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/staff/me", func(w http.ResponseWriter, r *http.Request) {
-		answer(w, apiclient.StaffProfile{Subject: "development", Admin: administers(r, ""), Allowed: true,
+		answer(w, apiclient.StaffProfile{Subject: "development", Admin: administers(r, ""), Allowed: true, Waiting: 2,
 			Collectives:   []apiclient.Collective{collectiveFor(r)},
 			Organisations: []apiclient.Organisation{organisationFor(r, organisation)}})
 	})
@@ -180,6 +180,8 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("GET /v1/staff/people", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, apiclient.People{
 			AdminGroup: "schmerz-admins", UsersGroup: "schmerz-users", RecoveryReady: false,
+			Pending:           []apiclient.User{{PK: 9, Username: hostile, Name: hostile, Email: hostile}},
+			OnboardingDomains: []string{"sozialratschlag.de"},
 			People: []apiclient.Person{
 				{PK: 7, Username: hostile, Name: hostile, Email: hostile, Admin: true, Self: true, Roles: []apiclient.RoleRef{
 					{Kind: "collective", ID: "c1", Name: hostile, Role: "admin"},
@@ -234,6 +236,15 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("POST /v1/staff/people/{pk}/link", write(apiclient.WayIn{Username: "kai", Link: "https://auth.example/if/flow/recovery/?token=again"}))
 	mux.HandleFunc("PUT /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("PUT /v1/staff/people/{pk}/email", write(map[string]bool{"done": true}))
+	mux.HandleFunc("PUT /v1/staff/people/{pk}/approval", write(map[string]bool{"done": true}))
+	mux.HandleFunc("DELETE /v1/staff/people/{pk}/approval", write(map[string]bool{"done": true}))
+	mux.HandleFunc("PUT /v1/staff/onboarding", write(map[string]any{"domains": []string{"sozialratschlag.de"}}))
+	mux.HandleFunc("GET /v1/console/auth", func(w http.ResponseWriter, _ *http.Request) {
+		answer(w, apiclient.AuthSettings{Provisioned: true, OnboardingDomains: []string{"sozialratschlag.de"}})
+	})
+	mux.HandleFunc("POST /v1/console/onboarding", write(apiclient.WayIn{
+		Username: "anna@sozialratschlag.de", Link: "https://auth.example/if/flow/recovery/?token=joined",
+	}))
 	mux.HandleFunc("DELETE /v1/staff/people/{pk}", write(map[string]bool{"done": true}))
 	mux.HandleFunc("POST /v1/staff/organisations", write(organisation))
 	mux.HandleFunc("PUT /v1/staff/organisations/{id}", write(organisation))
@@ -248,6 +259,11 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	guarded := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		identity, err := staffauth.Decode(r.Header.Get(staffauth.IdentityHeader))
 		token := r.Header.Get(staffauth.TokenHeader)
+		// The console's own routes are made before anybody is signed in:
+		// the secret, and no editor.
+		if strings.HasPrefix(r.URL.Path, "/v1/console/") {
+			err = nil
+		}
 		if err != nil || token != "the-shared-secret" {
 			http.Error(w, `{"detail":"this route belongs to the console"}`, http.StatusUnauthorized)
 			return
@@ -406,6 +422,8 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/settings/people#de"},
 		{path: "/auth/signed-out", plain: true},
 		{path: "/auth/signed-out?failed=1", plain: true},
+		{path: "/auth/join", plain: true},
+		{path: "/auth/join#de", plain: true},
 		{path: "/#en"},
 		{path: "/topics/t1#en"},
 		{path: "/actions/a1#en"},

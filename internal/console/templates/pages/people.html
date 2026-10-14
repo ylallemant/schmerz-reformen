@@ -28,6 +28,34 @@
 <p class="warning" role="status">{{ .T "people.no_recovery" }}</p>
 {{ end }}
 
+{{/* Accounts people made themselves, from an onboarding domain. Nothing
+     proved the address was theirs, so they are let in by somebody who
+     recognises them — or turned away, which deactivates the account. */}}
+{{ if .People.Pending }}
+<h2 id="waiting">{{ .T "people.waiting_title" }}</h2>
+<p class="section-note">{{ .T "people.waiting_lede" }}</p>
+<ul class="plain-list">
+  {{ range .People.Pending }}
+  <li class="person-row">
+    <span><strong>{{ .Name }}</strong> <span class="hint mono">{{ .Username }}</span>
+      {{ if .Email }}<br><a class="link wrap-anywhere" href="mailto:{{ .Email }}">{{ .Email }}</a>{{ end }}</span>
+    <span class="button-row">
+      <form method="post" action="/settings/people">
+        <input type="hidden" name="pk" value="{{ .PK }}">
+        <input type="hidden" name="username" value="{{ .Username }}">
+        <button class="button small" type="submit" name="action" value="approve">{{ $page.T "people.approve" }}</button>
+      </form>
+      <form method="post" action="/settings/people" data-confirm="{{ $page.T "people.refuse_confirm" }}">
+        <input type="hidden" name="pk" value="{{ .PK }}">
+        <input type="hidden" name="username" value="{{ .Username }}">
+        <button class="button danger small" type="submit" name="action" value="refuse">{{ $page.T "people.refuse" }}</button>
+      </form>
+    </span>
+  </li>
+  {{ end }}
+</ul>
+{{ end }}
+
 {{ if .People.People }}
 <div class="table-wrap">
   <table class="data-table">
@@ -129,6 +157,18 @@
     {{ .T "people.admin_role" }}</label>
   <p class="hint">{{ .Tf "people.users_hint" "Group" .People.UsersGroup }}</p>
   <button class="button" type="submit" name="action" value="invite">{{ .T "people.add" }}</button>
+</form>
+{{ end }}
+{{ if .People.AdminGroup }}
+<form method="post" action="/settings/people" class="prose">
+  <h2 id="onboarding">{{ .T "people.onboarding_title" }}</h2>
+  <p class="section-note">{{ .T "people.onboarding_lede" }}</p>
+  <label for="onboarding-domains">{{ .T "people.onboarding_domains" }}
+    <span class="hint">{{ .T "people.onboarding_hint" }}</span>
+  </label>
+  <input type="text" id="onboarding-domains" name="domains" maxlength="2000" autocomplete="off"
+         placeholder="sozialratschlag.de" value="{{ range $i, $domain := .People.OnboardingDomains }}{{ if $i }}, {{ end }}{{ $domain }}{{ end }}">
+  <button class="button secondary" type="submit" name="action" value="domains">{{ .T "button.save" }}</button>
 </form>
 {{ end }}
 {{end}}

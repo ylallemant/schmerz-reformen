@@ -71,14 +71,18 @@ var changesNothingCached = map[string]string{
 
 	// The identity provider: who may use the console. Nothing a reader sees
 	// is cached by who edits it.
-	"console-provision-auth":    "the console's own sign-in configuration",
-	"staff-invite-person":       "the directory, not the site's content",
-	"staff-set-person-admin":    "the directory, not the site's content",
-	"staff-set-person-email":    "the directory, not the site's content",
-	"staff-collective-grant":    "the directory, not the site's content",
-	"staff-collective-revoke":   "the directory, not the site's content",
-	"staff-organisation-grant":  "the directory, not the site's content",
-	"staff-organisation-revoke": "the directory, not the site's content",
+	"console-provision-auth":       "the console's own sign-in configuration",
+	"staff-invite-person":          "the directory, not the site's content",
+	"staff-set-person-admin":       "the directory, not the site's content",
+	"staff-set-person-email":       "the directory, not the site's content",
+	"staff-approve-person":         "the directory, not the site's content",
+	"staff-refuse-person":          "the directory, not the site's content",
+	"staff-set-onboarding-domains": "the sign-in settings, which nothing caches",
+	"console-onboard":              "the directory, not the site's content",
+	"staff-collective-grant":       "the directory, not the site's content",
+	"staff-collective-revoke":      "the directory, not the site's content",
+	"staff-organisation-grant":     "the directory, not the site's content",
+	"staff-organisation-revoke":    "the directory, not the site's content",
 
 	// A new organisation is in no collective's list yet, so nothing cached
 	// names it.

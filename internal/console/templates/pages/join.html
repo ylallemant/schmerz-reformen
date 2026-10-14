@@ -1,0 +1,37 @@
+{{define "content"}}
+<div class="prose">
+  <h1>{{ .T "join.title" }}</h1>
+
+  {{ if not .Domains }}
+  <p class="lede">{{ .T "join.closed" }}</p>
+
+  {{ else if .WayIn }}
+  {{/* Shown once, straight after it was made, and kept nowhere. */}}
+  <div class="form-notice" role="status">
+    <p>{{ .Tf "join.made" "Username" .WayIn.Username }}</p>
+    <p><a class="button" href="{{ .WayIn.Link }}">{{ .T "join.set_up" }}</a></p>
+    <p><code class="mono wrap-anywhere">{{ .WayIn.Link }}</code></p>
+    <p class="hint">{{ .T "join.once" }}</p>
+  </div>
+  {{/* Said before they find out at the door. */}}
+  <p class="section-note">{{ .T "join.waits" }}</p>
+
+  {{ else }}
+  <p class="lede">{{ .T "join.lede" }}</p>
+  <p class="section-note">{{ .T "join.domains" }}
+    {{ range $i, $domain := .Domains }}{{ if $i }}, {{ end }}<strong>@{{ $domain }}</strong>{{ end }}</p>
+  <form method="post" action="/auth/join">
+    <label for="join-name">{{ .T "people.name" }}</label>
+    <input type="text" id="join-name" name="name" maxlength="120" required autocomplete="name" value="{{ .Name }}">
+    <label for="join-email">{{ .T "people.email" }}
+      <span class="hint">{{ .T "join.email_hint" }}</span>
+    </label>
+    <input type="email" id="join-email" name="email" maxlength="200" required autocomplete="email" value="{{ .Email }}">
+    <p class="hint">{{ .T "join.approval" }}</p>
+    <button class="button" type="submit">{{ .T "join.submit" }}</button>
+  </form>
+  {{ end }}
+
+  <p><a class="link" href="/auth/login">{{ .T "join.have_account" }}</a></p>
+</div>
+{{end}}

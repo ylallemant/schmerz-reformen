@@ -154,6 +154,12 @@ type PeopleOutput struct {
 
 		// RecoveryReady says somebody added now can be given a way in.
 		RecoveryReady bool `json:"recovery_ready"`
+
+		// Pending are the people who made their own account and wait to be
+		// let in; OnboardingDomains are the domains that may. See
+		// onboarding.go.
+		Pending           []PendingItem `json:"pending"`
+		OnboardingDomains []string      `json:"onboarding_domains"`
 	}
 }
 
@@ -289,6 +295,16 @@ func (a *API) staffListPeople(ctx context.Context, _ *struct{}) (*PeopleOutput, 
 		}
 		return left.Username < right.Username
 	})
+
+	if out.Body.Pending, err = a.waitingPeople(ctx, client); err != nil {
+		return nil, directoryRefusal(err, "cannot read who is waiting")
+	}
+	out.Body.OnboardingDomains = []string{}
+	if settings, err := a.store.AuthSettings(ctx); err == nil {
+		out.Body.OnboardingDomains = settings.OnboardingDomainList()
+	} else {
+		log.Error().Err(err).Msg("cannot read the onboarding domains")
+	}
 
 	if found, err := client.Check(ctx); err == nil {
 		out.Body.RecoveryReady = found.HasRecoveryFlow

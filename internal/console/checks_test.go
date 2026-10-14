@@ -49,7 +49,7 @@ func TestEveryKeyTheConsoleAsksForIsDefined(t *testing.T) {
 		"propose", "approve", "reject", "withdraw"} {
 		enumerated = append(enumerated, "audit.action."+verb)
 	}
-	for _, subject := range []string{"collective", "member", "organisation", "topic", "update", "action", "installation", "role"} {
+	for _, subject := range []string{"collective", "member", "organisation", "topic", "update", "action", "installation", "role", "person"} {
 		enumerated = append(enumerated, "audit.type."+subject)
 	}
 

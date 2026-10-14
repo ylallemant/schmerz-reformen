@@ -168,3 +168,41 @@ func TestTheIssuerIsTheApplications(t *testing.T) {
 		t.Errorf("admin group = %q, want the name this project used before provisioning", name)
 	}
 }
+
+// TestOnboardingDomainsChangeAloneAndNeedADirectory: changed from the console
+// after setup, without touching the sealed credentials in the same row — and
+// refused before there is a directory to onboard into.
+func TestOnboardingDomainsChangeAloneAndNeedADirectory(t *testing.T) {
+	driver, dsn := storetest.Database(t)
+	s := keyedStore(t, driver, dsn, newKey(t))
+	ctx := context.Background()
+
+	if err := s.SetOnboardingDomains(ctx, []string{"sozialratschlag.de"}); !errors.Is(err, ErrNotProvisioned) {
+		t.Errorf("before setup: %v, want ErrNotProvisioned", err)
+	}
+	settings := provisioned()
+	settings.OnboardingDomains = "verdi.de"
+	if err := s.SaveAuthSettings(ctx, settings, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetOnboardingDomains(ctx, []string{"sozialratschlag.de", "verdi.de"}); err != nil {
+		t.Fatalf("SetOnboardingDomains: %v", err)
+	}
+
+	got, err := s.AuthSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OnboardingDomains != "sozialratschlag.de, verdi.de" {
+		t.Errorf("domains = %q", got.OnboardingDomains)
+	}
+	if got.ClientSecret != settings.ClientSecret || got.APIToken != settings.APIToken {
+		t.Error("changing the domains disturbed the sealed credentials")
+	}
+	if err := s.SetOnboardingDomains(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.AuthSettings(ctx); len(got.OnboardingDomainList()) != 0 {
+		t.Errorf("an emptied list reads as %q", got.OnboardingDomainList())
+	}
+}

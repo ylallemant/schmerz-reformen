@@ -415,11 +415,13 @@ func (c *console) currentAdminGroup() string {
 
 // noticeKeys are the confirmations a redirect may ask a page to show.
 var noticeKeys = map[string]string{
-	"saved":   "notice.saved",
-	"created": "notice.created",
-	"deleted": "notice.deleted",
-	"logo":    "notice.logo",
-	"removed": "notice.removed",
+	"saved":    "notice.saved",
+	"created":  "notice.created",
+	"deleted":  "notice.deleted",
+	"logo":     "notice.logo",
+	"removed":  "notice.removed",
+	"approved": "notice.approved",
+	"refused":  "notice.refused",
 }
 
 // profile asks the backend which collectives the signed-in editor manages.

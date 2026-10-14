@@ -124,6 +124,27 @@ func (c *console) savePeople(w http.ResponseWriter, r *http.Request) {
 		}
 		redirect(w, r, "/settings/people", "saved")
 
+	case "approve":
+		if err := client.ApprovePerson(r.Context(), pk, username); err != nil {
+			refused(err, nil)
+			return
+		}
+		redirect(w, r, "/settings/people#waiting", "approved")
+
+	case "refuse":
+		if err := client.RefusePerson(r.Context(), pk, username); err != nil {
+			refused(err, nil)
+			return
+		}
+		redirect(w, r, "/settings/people#waiting", "refused")
+
+	case "domains":
+		if _, err := client.SetOnboardingDomains(r.Context(), r.FormValue("domains")); err != nil {
+			refused(err, nil)
+			return
+		}
+		redirect(w, r, "/settings/people#onboarding", "saved")
+
 	case "remove":
 		if err := client.RemovePerson(r.Context(), pk, username); err != nil {
 			refused(err, nil)

@@ -18,6 +18,10 @@ import (
 // endpoint. See SaveAuthSettings.
 var ErrAlreadyProvisioned = errors.New("the identity provider is already configured")
 
+// ErrNotProvisioned means the setup wizard has not run, so there is no
+// directory for a setting about it to apply to.
+var ErrNotProvisioned = errors.New("no identity provider is configured")
+
 // AuthSettings reads the identity provider configuration.
 //
 // Both secrets are decrypted on the way out. A row written with a different
@@ -112,4 +116,23 @@ func (s *Store) AuthProvisioned(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("read auth settings: %w", err)
 	}
 	return settings.Provisioned, nil
+}
+
+// SetOnboardingDomains changes which domains may make their own account, and
+// nothing else in the row: the sealed credentials beside it are not re-read
+// or re-written, so a change made from the console cannot disturb them.
+//
+// It needs a provisioned installation — onboarding makes accounts in the
+// directory the wizard connected — and says so otherwise.
+func (s *Store) SetOnboardingDomains(ctx context.Context, domains []string) error {
+	result := s.db.WithContext(ctx).Model(&models.AuthSettings{}).
+		Where("id = ? AND provisioned = ?", models.AuthSettingsID, true).
+		Update("onboarding_domains", models.JoinDomains(domains))
+	if result.Error != nil {
+		return fmt.Errorf("save the onboarding domains: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotProvisioned
+	}
+	return nil
 }

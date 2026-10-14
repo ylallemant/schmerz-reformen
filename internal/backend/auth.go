@@ -90,6 +90,10 @@ type AuthItem struct {
 
 	ProvisionedBy string     `json:"provisioned_by,omitempty"`
 	ProvisionedAt *time.Time `json:"provisioned_at,omitempty"`
+
+	// OnboardingDomains are the domains whose addresses may make their own
+	// account. Not a secret: the join form names them.
+	OnboardingDomains []string `json:"onboarding_domains"`
 }
 
 // AuthOutput is the configuration.
@@ -125,6 +129,8 @@ func (a *API) consoleGetAuth(ctx context.Context, _ *struct{}) (*AuthOutput, err
 		AdminGroupName: settings.AdminGroupName(),
 		ProvisionedBy:  settings.ProvisionedBy,
 		ProvisionedAt:  settings.ProvisionedAt,
+
+		OnboardingDomains: settings.OnboardingDomainList(),
 	}}, nil
 }
 
@@ -161,6 +167,10 @@ type ProvisionInput struct {
 		// the token — on a fresh Authentik the bootstrap akadmin.
 		AdminUsername string `json:"admin_username,omitempty"`
 		AdminName     string `json:"admin_name,omitempty"`
+
+		// OnboardingDomains may make their own account, waiting for
+		// approval: one per line or separated by commas. Empty is nobody.
+		OnboardingDomains string `json:"onboarding_domains,omitempty"`
 
 		// Reprovision replaces a configuration that already exists. The
 		// console sends it only when it was started with --superuser.
@@ -214,6 +224,11 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 		return nil, huma.Error422UnprocessableEntity("the console's address must be an http or https URL")
 	}
 
+	domains, err := models.ParseDomains(in.Body.OnboardingDomains)
+	if err != nil {
+		return nil, huma.Error422UnprocessableEntity("each onboarding domain must be a domain, like sozialratschlag.de")
+	}
+
 	if !in.Body.Reprovision {
 		// Asked before anything is created in the directory: refusing the
 		// store write afterwards would leave a provisioned directory and a
@@ -249,6 +264,7 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 		return out, nil
 	}
 
+	result.Settings.OnboardingDomains = models.JoinDomains(domains)
 	err = a.store.SaveAuthSettings(ctx, result.Settings, in.Body.Reprovision)
 	if errors.Is(err, store.ErrAlreadyProvisioned) {
 		return nil, huma.Error409Conflict(

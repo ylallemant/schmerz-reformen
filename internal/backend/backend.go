@@ -137,6 +137,14 @@ type API struct {
 	// script and ten thousand of them.
 	signups *ratelimit.Limiter
 
+	// onboardings bounds how fast accounts are made from the console's open
+	// join form. See onboarding.go.
+	onboardings *ratelimit.Limiter
+
+	// waiting is how many self-made accounts wait, counted at most once a
+	// minute. See onboarding.go.
+	waiting waitingCount
+
 	// staffToken is the secret the console presents. Empty switches the
 	// content API off unless development is set.
 	staffToken string
@@ -305,6 +313,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		pushKey:     pushConfig.PublicKey,
 		phrases:     phrasesFor(config.LoadNotificationLanguage()),
 		signups:     ratelimit.New(signupBurst, signupRefill),
+		onboardings: ratelimit.New(onboardingBurst, onboardingRefill),
 		siteURL:     config.LoadSiteURL(),
 		geocoder:    geocoder,
 		staffToken:  staffConfig.Token,
@@ -368,6 +377,7 @@ func (a *API) registerOperations(api huma.API) {
 	a.registerStaffRoutes(api)
 	a.registerAuthRoutes(api)
 	a.registerPeopleRoutes(api)
+	a.registerOnboardingRoutes(api)
 }
 
 // sweepInterval is how often expired rows are removed. Nothing depends on the

@@ -275,6 +275,10 @@ type wizardPage struct {
 	AdminUsername string
 	AdminName     string
 
+	// OnboardingDomains may make their own account, as typed: one per line
+	// or separated by commas.
+	OnboardingDomains string
+
 	// What was done.
 	Done          bool
 	Result        apiclient.Provisioning
@@ -312,6 +316,14 @@ func (c *console) wizard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet {
+		// Replacing a configuration keeps the domains it had unless they are
+		// changed here: setup run again to fix a redirect should not quietly
+		// switch onboarding off.
+		if door.Reprovision {
+			if current, err := c.backend.AsConsole(c.staffToken).AuthSettings(r.Context()); err == nil {
+				page.OnboardingDomains = strings.Join(current.OnboardingDomains, ", ")
+			}
+		}
 		c.renderWizard(w, http.StatusOK, page)
 		return
 	}
@@ -329,6 +341,8 @@ func (c *console) wizard(w http.ResponseWriter, r *http.Request) {
 		AdminUsername: strings.TrimSpace(r.PostFormValue("admin_username")),
 		AdminName:     strings.TrimSpace(r.PostFormValue("admin_name")),
 		Reprovision:   door.Reprovision,
+
+		OnboardingDomains: strings.TrimSpace(r.PostFormValue("onboarding_domains")),
 	}
 	if request.AppName == "" {
 		request.AppName = models.DefaultAppName
@@ -338,6 +352,7 @@ func (c *console) wizard(w http.ResponseWriter, r *http.Request) {
 	}
 	page.AppName, page.InstanceURL, page.ConsoleURL = request.AppName, request.InstanceURL, request.ConsoleURL
 	page.AdminUsername, page.AdminName = request.AdminUsername, request.AdminName
+	page.OnboardingDomains = request.OnboardingDomains
 
 	result, err := c.backend.AsConsole(c.staffToken).Provision(r.Context(), request)
 	if err != nil {

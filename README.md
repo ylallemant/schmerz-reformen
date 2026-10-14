@@ -58,6 +58,17 @@ its address at that moment, and never renamed. Whoever runs a collective or an
 organisation picks its people from a list of the console's users on its own
 page; the site's administrators add people to that list from **People**.
 
+**Joining by themselves.** The site's administrators can name domains — the
+movement's own, `sozialratschlag.de` say — whose addresses may make their own
+account at the console's `/auth/join`, without waiting to be added. The
+address becomes the username and the way in is shown at once. Because nothing
+is emailed, nothing proves the address belongs to whoever typed it, so the
+account lands in `schmerz-pending`, which is not a role: it can set up its
+passkey and do nothing else until an administrator lets it in from
+**People** — or turns it away, which deactivates it. An address that already
+has an account never gets a way in this way. The domains are set in the setup
+wizard and changed on the People page.
+
 The console sets itself up in Authentik. On first start it is **locked** —
 nobody can sign in — and a setup wizard waits on its *maintenance* port, which
 is never published. Given an Authentik address and a one-off API token, it
