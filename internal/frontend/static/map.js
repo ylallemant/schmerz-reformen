@@ -23,7 +23,16 @@
   var HOME = { center: [51.1657, 10.4515], zoom: 6 };
 
   function tiles(map, attribution) {
-    L.tileLayer(TILES, { maxZoom: 19, attribution: attribution }).addTo(map);
+    L.tileLayer(TILES, {
+      maxZoom: 19,
+      // OSM's tile policy requires a Referer and answers "Access blocked"
+      // without one — and the site-wide Referrer-Policy: same-origin sends
+      // none cross-site. strict-origin sends the site's origin and never the
+      // path, so the tile server learns which site is asking, not which
+      // topic or action somebody is reading.
+      referrerPolicy: "strict-origin",
+      attribution: attribution
+    }).addTo(map);
   }
 
   // A marker is a colour and a shape: a topic is a diamond, an action a

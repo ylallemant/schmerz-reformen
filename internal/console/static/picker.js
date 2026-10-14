@@ -45,6 +45,11 @@
 
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
+    // OSM's tile policy requires a Referer and answers "Access blocked"
+    // without one, and the console's Referrer-Policy: same-origin sends none
+    // cross-site. strict-origin sends the console's origin and never the path
+    // — which would name the topic or action being edited.
+    referrerPolicy: "strict-origin",
     attribution: holder.dataset.attribution
   }).addTo(map);
 
