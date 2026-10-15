@@ -230,6 +230,9 @@ func (s *site) registerRoutes(mux *http.ServeMux) error {
 	if err := web.ThirdParty(mux); err != nil {
 		return err
 	}
+	if err := web.MapScripts(mux); err != nil {
+		return err
+	}
 
 	// A service worker's scope is the path it is served from, so the push
 	// receiver has to be at the root to see the whole site.

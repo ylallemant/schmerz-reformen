@@ -295,6 +295,9 @@ func (c *console) registerRoutes(mux *http.ServeMux) error {
 	if err := web.ThirdParty(mux); err != nil {
 		return err
 	}
+	if err := web.MapScripts(mux); err != nil {
+		return err
+	}
 
 	// The shared palette, component styles and toggle, served from the theme
 	// package so neither service keeps a copy.
