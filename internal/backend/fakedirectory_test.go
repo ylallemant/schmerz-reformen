@@ -294,6 +294,20 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		}})
 
 	case r.Method == http.MethodGet && path == "/core/users/":
+		// As Authentik does: groups_by_name is a choice among the groups
+		// that exist, and a name that is none of them is refused rather
+		// than answered with nobody.
+		if group := query.Get("groups_by_name"); group != "" {
+			exists := false
+			for _, known := range f.groups {
+				exists = exists || known.Name == group
+			}
+			if !exists {
+				answer(400, map[string]any{"groups_by_name": []string{
+					"Select a valid choice. " + group + " is not one of the available choices."}})
+				return
+			}
+		}
 		var results []any
 		for _, user := range f.users {
 			if name := query.Get("username"); name != "" && user.Username != name {

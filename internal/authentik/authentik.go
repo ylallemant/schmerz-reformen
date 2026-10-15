@@ -806,11 +806,22 @@ func (c *Client) HasRecoveryFlow(ctx context.Context) (bool, error) {
 	return len(found.Results) > 0, nil
 }
 
-// UsersInGroup lists the people holding one role.
+// UsersInGroup lists the people holding one role. A group that does not exist
+// has nobody in it.
 //
 // Paged through to the end rather than taking the first page: a site whose
 // staff list silently stopped at the page size would be one where somebody
 // still has access and nobody can see them.
+//
+// # A group that does not exist is asked about, not trusted to the filter
+//
+// Authentik's groups_by_name filter is a choice among the groups that exist,
+// and a name that is none of them is refused with a 400 — "Select a valid
+// choice. x is not one of the available choices" — rather than answered with
+// nobody. Met in production: a group made by a newer version's setup, on an
+// installation set up before it, took the whole people page down. So when the
+// filter is refused, whether the group exists is asked directly, and only a
+// group that does exist leaves the refusal standing.
 func (c *Client) UsersInGroup(ctx context.Context, groupName string) ([]User, error) {
 	var all []User
 	for next := 1; next > 0; {
@@ -818,6 +829,10 @@ func (c *Client) UsersInGroup(ctx context.Context, groupName string) ([]User, er
 		path := fmt.Sprintf("/core/users/?groups_by_name=%s&page=%d&page_size=100",
 			url.QueryEscape(groupName), next)
 		if err := c.do(ctx, http.MethodGet, path, nil, &found); err != nil {
+			if _, lookup := c.GroupByName(ctx, groupName); errors.Is(lookup, ErrNotFound) {
+				log.Debug().Str("group", groupName).Msg("authentik: no such group, so nobody is in it")
+				return nil, nil
+			}
 			return nil, err
 		}
 		all = append(all, found.Results...)

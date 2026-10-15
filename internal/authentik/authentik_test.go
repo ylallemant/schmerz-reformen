@@ -1085,3 +1085,26 @@ func TestAPersonsGroupsAreReadByName(t *testing.T) {
 		t.Errorf("group names = %v", names)
 	}
 }
+
+// TestAGroupThatDoesNotExistHasNobodyInIt — and a refusal for a group that
+// does exist is still a refusal. Authentik answers the first with a 400, not
+// with an empty list; production met it.
+func TestAGroupThatDoesNotExistHasNobodyInIt(t *testing.T) {
+	refused := map[string]any{"groups_by_name": []string{
+		"Select a valid choice. schmerz-pending is not one of the available choices."}}
+
+	f := newFake(t)
+	f.handle("/api/v3/core/users/", 400, refused)
+	f.handle("/api/v3/core/groups/", 200, empty())
+	users, err := f.client(t).UsersInGroup(context.Background(), "schmerz-pending")
+	if err != nil || len(users) != 0 {
+		t.Errorf("a group that does not exist: %v, %v; want nobody and no error", users, err)
+	}
+
+	f = newFake(t)
+	f.handle("/api/v3/core/users/", 400, refused)
+	f.handle("/api/v3/core/groups/", 200, list(map[string]any{"pk": "g-1", "name": "schmerz-pending"}))
+	if _, err := f.client(t).UsersInGroup(context.Background(), "schmerz-pending"); err == nil {
+		t.Error("a refusal for a group that exists was taken for nobody")
+	}
+}

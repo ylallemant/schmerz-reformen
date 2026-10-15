@@ -235,3 +235,31 @@ func domainsInput(domains string) *OnboardingDomainsInput {
 	in.Body.Domains = domains
 	return in
 }
+
+// TestAnInstallationOlderThanTheWaitingGroupStillListsItsPeople — met in
+// production: set up before setup made schmerz-pending, so the group did not
+// exist, and Authentik refuses to list the members of a group it does not
+// have. The people page failed whole.
+func TestAnInstallationOlderThanTheWaitingGroupStillListsItsPeople(t *testing.T) {
+	a := newAPI(t)
+	f := newFakeDirectory(t)
+	provisioned(t, a, f)
+	f.mu.Lock()
+	for pk, group := range f.groups {
+		if group.Name == "schmerz-pending" {
+			delete(f.groups, pk)
+		}
+	}
+	f.mu.Unlock()
+
+	people, err := a.staffListPeople(admin(), nil)
+	if err != nil {
+		t.Fatalf("the people page with no waiting group: %v", err)
+	}
+	if len(people.Body.Pending) != 0 || len(people.Body.People) == 0 {
+		t.Errorf("pending %+v, people %d", people.Body.Pending, len(people.Body.People))
+	}
+	if me, err := a.staffMe(admin(), nil); err != nil || me.Body.Waiting != 0 {
+		t.Errorf("waiting %d, %v", me.Body.Waiting, err)
+	}
+}
