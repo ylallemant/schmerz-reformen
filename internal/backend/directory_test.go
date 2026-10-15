@@ -822,3 +822,84 @@ func TestTheDirectoryIsAskedAsThisSite(t *testing.T) {
 		}
 	}
 }
+
+// TestSetUpBesideThePlatformsSignIn: when the deployment platform made the
+// sign-in client and the static groups, setup makes neither — a client of its
+// own would be a second way in, and a group of its own would be refused by the
+// platform as made by hand. It requires the groups, gives the backend its
+// service account, and binds this site's recovery flow to the brand the
+// platform made on the project's own address, never to the shared default.
+func TestSetUpBesideThePlatformsSignIn(t *testing.T) {
+	a := newAPI(t)
+	f := newFakeDirectory(t)
+	f.recoveryBound = true // the shared default brand names another project's flow
+	f.ownBrand = true      // and the platform made one on this address, with none
+
+	in := &ProvisionInput{}
+	in.Body.InstanceURL, in.Body.Token = f.URL(), "a-pasted-setup-token"
+	in.Body.ConsoleURL = "https://console.example/"
+	in.Body.AdminUsername, in.Body.AdminName = "maria", "Maria"
+	in.Body.SignInByPlatform = true
+
+	// Before the platform's identity reconcile: said, and nothing made.
+	posts := f.called("POST ")
+	out, err := a.consoleProvisionAuth(context.Background(), in)
+	if err != nil {
+		t.Fatalf("consoleProvisionAuth: %v", err)
+	}
+	if out.Body.Done || len(out.Body.Missing) != 3 || !strings.Contains(out.Body.Missing[0], "schmerz-admins") {
+		t.Errorf("without the platform's groups: done %v, missing %q", out.Body.Done, out.Body.Missing)
+	}
+	if f.called("POST ") != posts {
+		t.Errorf("something was created before the platform's groups existed: %v", f.calls)
+	}
+
+	// The platform's reconcile has run.
+	f.mu.Lock()
+	for _, name := range []string{"schmerz-admins", "schmerz-users", "schmerz-pending"} {
+		f.groupNamed(name)
+	}
+	f.mu.Unlock()
+
+	out, err = a.consoleProvisionAuth(context.Background(), in)
+	if err != nil || !out.Body.Done {
+		t.Fatalf("consoleProvisionAuth: %+v, %v", out, err)
+	}
+	if f.called("POST /providers/oauth2/") != 0 || f.called("POST /core/applications/") != 0 {
+		t.Error("a sign-in client was made beside the platform's")
+	}
+	for _, name := range []string{"schmerz-admins", "schmerz-users", "schmerz-pending"} {
+		count := 0
+		for _, existing := range f.groupNames() {
+			if existing == name {
+				count++
+			}
+		}
+		if count != 1 {
+			t.Errorf("%s exists %d times: setup made one beside the platform's", name, count)
+		}
+	}
+	if !slices.Contains(f.groupsOf("maria"), "schmerz-admins") {
+		t.Errorf("maria is in %v, want the platform's administrators", f.groupsOf("maria"))
+	}
+	if out.Body.ServiceAccount != "schmerz-service" {
+		t.Errorf("service account %q (%q)", out.Body.ServiceAccount, out.Body.ServiceAccountNote)
+	}
+
+	// Invite links are made with this site's flow, on its own brand — and
+	// the shared default brand keeps the flow it had.
+	f.mu.Lock()
+	ownRecovery, sharedBound := f.ownRecovery, f.recoveryBound
+	f.mu.Unlock()
+	if ownRecovery != "flow-schmerz-recovery" || !sharedBound {
+		t.Errorf("own brand recovery %q, shared still bound %v", ownRecovery, sharedBound)
+	}
+	if !strings.Contains(out.Body.AdminLink, "/if/flow/schmerz-recovery/") {
+		t.Errorf("the first admin's way in is %q, want this site's own flow", out.Body.AdminLink)
+	}
+
+	settings, err := a.consoleGetAuth(context.Background(), nil)
+	if err != nil || !settings.Body.SignInByPlatform || settings.Body.ClientID != "" {
+		t.Errorf("stored settings: %+v, %v", settings.Body, err)
+	}
+}

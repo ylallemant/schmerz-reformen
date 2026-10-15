@@ -979,21 +979,17 @@ const (
 // A stock authentik ships the flow and binds nothing, which is why this is the
 // first thing an operator has to do by hand and why the console says so.
 func (c *Client) BrandHasRecoveryFlow(ctx context.Context) (bool, error) {
-	var found page[struct {
-		Domain       string `json:"domain"`
-		Default      bool   `json:"default"`
-		RecoveryFlow string `json:"flow_recovery"`
-	}]
-	if err := c.do(ctx, http.MethodGet, "/core/brands/?default=true", nil, &found); err != nil {
-		return false, fmt.Errorf("read the default brand: %w", err)
+	brand, ok, err := c.ownBrand(ctx)
+	if err != nil {
+		return false, err
 	}
-	if len(found.Results) == 0 {
-		// No default brand at all. Nothing can be onboarded through it, which
-		// is the answer rather than an error.
-		log.Warn().Msg("authentik: no default brand, so nobody can be given a way in")
+	if !ok {
+		// No brand answers this address at all. Nothing can be onboarded
+		// through it, which is the answer rather than an error.
+		log.Warn().Str("host", c.host()).Msg("authentik: no brand answers this address, so nobody can be given a way in")
 		return false, nil
 	}
-	return found.Results[0].RecoveryFlow != "", nil
+	return brand.RecoveryFlow != "", nil
 }
 
 // Check looks for everything the integration needs and reports what is absent.

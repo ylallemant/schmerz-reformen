@@ -94,6 +94,10 @@ type AuthItem struct {
 	// OnboardingDomains are the domains whose addresses may make their own
 	// account. Not a secret: the join form names them.
 	OnboardingDomains []string `json:"onboarding_domains"`
+
+	// SignInByPlatform says no client was made here: the console must have
+	// the deployment platform's in its environment.
+	SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
 }
 
 // AuthOutput is the configuration.
@@ -131,6 +135,7 @@ func (a *API) consoleGetAuth(ctx context.Context, _ *struct{}) (*AuthOutput, err
 		ProvisionedAt:  settings.ProvisionedAt,
 
 		OnboardingDomains: settings.OnboardingDomainList(),
+		SignInByPlatform:  settings.SignInByPlatform,
 	}}, nil
 }
 
@@ -167,6 +172,12 @@ type ProvisionInput struct {
 		// the token — on a fresh Authentik the bootstrap akadmin.
 		AdminUsername string `json:"admin_username,omitempty"`
 		AdminName     string `json:"admin_name,omitempty"`
+
+		// SignInByPlatform says the console signs people in with a client the
+		// deployment platform made: none is made here, and the static groups
+		// are the platform's to make. The console sends it when its
+		// environment carries a client id.
+		SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
 
 		// OnboardingDomains may make their own account, waiting for
 		// approval: one per line or separated by commas. Empty is nobody.
@@ -247,7 +258,7 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 
 	result, err := provision(ctx, client, consoleURL, appName, firstAdmin{
 		Username: in.Body.AdminUsername, Name: in.Body.AdminName,
-	})
+	}, in.Body.SignInByPlatform)
 	out := &ProvisionOutput{Body: ProvisionItem{
 		Done: result.Done, Missing: result.Missing, AdminUsername: result.AdminUsername,
 		TokenOwner: result.TokenOwner, InstanceURL: result.InstanceURL, AppName: result.AppName,

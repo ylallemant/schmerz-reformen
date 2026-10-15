@@ -99,6 +99,14 @@ type AuthSettings struct {
 	// membership can be changed without looking it up by name.
 	AdminGroup string `gorm:"size:64" json:"admin_group,omitempty"`
 
+	// SignInByPlatform says the console signs people in with a client the
+	// deployment platform made and gives it in its environment, so this site
+	// made none of its own: ClientID and ClientSecret are empty, and the
+	// administrators', users' and waiting groups are the platform's. What
+	// was provisioned here is the directory access the platform does not
+	// give yet — the service account and the recovery flow.
+	SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
+
 	// OnboardingDomains are the domains whose addresses may make their own
 	// console account, waiting for approval: "sozialratschlag.de, ...". Set in
 	// the setup wizard and changed by the site's administrators. Empty is

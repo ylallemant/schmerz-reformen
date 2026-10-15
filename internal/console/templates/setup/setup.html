@@ -17,8 +17,9 @@
     <p class="hint">Provisioned with <code>{{ .Result.TokenOwner }}</code>'s token, which holds no
        role here — it was the way in to your directory, not to this site.</p>
     {{ end }}
-    <p>Editors now sign in through <code>{{ .Result.InstanceURL }}</code>, with the application
-       <code>{{ .Result.AppName }}</code>. Its administrators are the group
+    <p>Editors now sign in through <code>{{ .Result.InstanceURL }}</code>, with
+       {{ if .Platform }}the client the deployment platform made{{ else }}the application
+       <code>{{ .Result.AppName }}</code>{{ end }}. Its administrators are the group
        <code>{{ .AdminGroup }}</code>, and everybody who may use the console is in
        <code>{{ .Result.AppName }}-users</code>. Each collective and each organisation is given
        groups of its own when it is created, named after its address.</p>
@@ -187,6 +188,20 @@
     <p class="hint">This takes up to a minute against a remote Authentik. Keep the page open.</p>
   </form>
 
+  {{ if .Platform }}
+  <div class="notice">
+    <p><strong>The deployment platform made this site's sign-in.</strong> The console signs people
+       in with the platform's client, and the groups <code>{{ .AppName }}-admins</code>,
+       <code>{{ .AppName }}-users</code> and <code>{{ .AppName }}-pending</code> are the platform's:
+       this run requires them and makes none. Run the platform's <code>identity reconcile</code>
+       first. Point the address above at this site's own sign-in address (its issuer, without the
+       path), so that invite links are made there.</p>
+    <p>What this creates is what the platform does not give yet: a service account
+       <code>{{ .AppName }}-service</code> with a role holding only what the backend needs and a
+       token of its own — which makes each collective's and organisation's groups and hands out
+       invite links — and a recovery flow, bound to the brand of that address.</p>
+  </div>
+  {{ else }}
   <div class="notice">
     <p>What this creates in your directory: an OAuth2 provider, an application, the groups
        <code>{{ .AppName }}-admins</code>, <code>{{ .AppName }}-users</code> and
@@ -195,6 +210,9 @@
        token of its own, and — only if your Authentik has none — a recovery flow, bound to the
        default brand only if the brand has none either. Each collective and organisation gets
        its own groups when it is created.</p>
+  </div>
+  {{ end }}
+  <div class="notice">
     <p>Anything of these that already exists is reused and brought in line rather than
        duplicated, and the result page lists every correction. An existing account named as
        the first administrator is adopted as it is.</p>

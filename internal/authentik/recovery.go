@@ -407,31 +407,35 @@ func (c *Client) ensureBinding(ctx context.Context, flowPK, stagePK string, orde
 // one carries a decision somebody made, and overwriting it would be this
 // console reaching into how an operator's other applications recover — the
 // thing the no-flows rule existed to prevent, and the part of it that stands.
+//
+// The brand is the one this site's address is answered by (see brand.go):
+// the default brand on a shared address, or the brand the platform made on
+// an address of the project's own — which carries no recovery flow precisely
+// so that the project binds its own here.
 func (c *Client) bindRecoveryFlowToBrand(ctx context.Context, flowPK string) (bool, error) {
-	var found page[struct {
-		UUID         string `json:"brand_uuid"`
-		RecoveryFlow string `json:"flow_recovery"`
-	}]
-	if err := c.do(ctx, http.MethodGet, "/core/brands/?default=true", nil, &found); err != nil {
-		return false, fmt.Errorf("read the default brand: %w", err)
+	brand, ok, err := c.ownBrand(ctx)
+	if err != nil {
+		return false, err
 	}
-	if len(found.Results) == 0 {
-		log.Warn().Msg("authentik: no default brand, so the recovery flow is not reachable yet")
+	if !ok {
+		log.Warn().Str("host", c.host()).Msg("authentik: no brand answers this address, so the recovery flow is not reachable yet")
 		return false, nil
 	}
-
-	brand := found.Results[0]
 	if brand.RecoveryFlow != "" {
-		log.Info().Msg("authentik: the default brand already has a recovery flow; leaving it alone")
+		if brand.RecoveryFlow == flowPK {
+			return true, nil
+		}
+		log.Info().Str("domain", brand.Domain).Msg("authentik: the brand already has a recovery flow; leaving it alone")
 		return false, nil
 	}
 
 	body := map[string]any{"flow_recovery": flowPK}
 	path := "/core/brands/" + url.PathEscape(brand.UUID) + "/"
 	if err := c.do(ctx, http.MethodPatch, path, body, nil); err != nil {
-		return false, fmt.Errorf("point the default brand at the recovery flow: %w", err)
+		return false, fmt.Errorf("point the brand on %s at the recovery flow: %w", brand.Domain, err)
 	}
-	log.Warn().Msg("authentik: the default brand now uses this site's recovery flow")
+	log.Warn().Str("domain", brand.Domain).Bool("default", brand.Default).
+		Msg("authentik: the brand now uses this site's recovery flow")
 	return true, nil
 }
 

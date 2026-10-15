@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +29,12 @@ type fakeDirectory struct {
 	// Instance state.
 	recoveryBound bool
 	hasCert       bool
+
+	// ownBrand is a brand on this fake's own host, as the deployment platform
+	// makes for a project: the default brand's sign-in flows and, until the
+	// project binds one, no recovery flow. ownRecovery is the one bound.
+	ownBrand    bool
+	ownRecovery string
 
 	// agents are the User-Agents requests arrived with, in order.
 	agents []string
@@ -208,6 +215,13 @@ func (f *fakeDirectory) called(prefix string) int {
 	return count
 }
 
+// host is the host this fake answers on — the domain a project's own brand
+// would be made for.
+func (f *fakeDirectory) host() string {
+	parsed, _ := url.Parse(f.server.URL)
+	return parsed.Hostname()
+}
+
 // groupNames lists every group the directory has, by name.
 func (f *fakeDirectory) groupNames() []string {
 	f.mu.Lock()
@@ -372,12 +386,21 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		answer(201, f.userJSON(user))
 
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/recovery/"):
-		if !f.recoveryBound {
+		// As Authentik does: with the recovery flow of the brand that answers
+		// the request's host — the project's own when there is one.
+		flow := ""
+		if f.recoveryBound {
+			flow = "flow-recovery"
+		}
+		if f.ownBrand {
+			flow = f.ownRecovery
+		}
+		if flow == "" {
 			answer(400, map[string]any{"non_field_errors": []string{"No recovery flow set."}})
 			return
 		}
 		pk := strings.TrimSuffix(strings.TrimPrefix(path, "/core/users/"), "/recovery/")
-		answer(200, map[string]any{"link": f.server.URL + "/if/flow/recovery/?token=for-" + pk})
+		answer(200, map[string]any{"link": f.server.URL + "/if/flow/" + strings.TrimPrefix(flow, "flow-") + "/?token=for-" + pk})
 
 	case r.Method == http.MethodGet && path == "/core/groups/":
 		var results []any
@@ -478,10 +501,29 @@ func (f *fakeDirectory) serve(w http.ResponseWriter, r *http.Request) {
 		if f.recoveryBound {
 			recovery = "flow-recovery"
 		}
-		answer(200, page([]any{map[string]any{"brand_uuid": "brand-1", "default": true, "flow_recovery": recovery}}))
+		brands := []map[string]any{{"brand_uuid": "brand-1", "domain": "authentik-default", "default": true, "flow_recovery": recovery}}
+		if f.ownBrand {
+			brands = append(brands, map[string]any{"brand_uuid": "brand-own", "domain": f.host(),
+				"default": false, "flow_recovery": f.ownRecovery})
+		}
+		var results []any
+		for _, brand := range brands {
+			if domain := query.Get("domain"); domain != "" && brand["domain"] != domain {
+				continue
+			}
+			if query.Get("default") == "true" && brand["default"] != true {
+				continue
+			}
+			results = append(results, brand)
+		}
+		answer(200, page(results))
 
 	case r.Method == http.MethodPatch && path == "/core/brands/brand-1/":
 		f.recoveryBound = true
+		answer(200, map[string]any{})
+
+	case r.Method == http.MethodPatch && path == "/core/brands/brand-own/":
+		f.ownRecovery, _ = body["flow_recovery"].(string)
 		answer(200, map[string]any{})
 
 	case r.Method == http.MethodGet && path == "/stages/all/":

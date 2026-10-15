@@ -146,6 +146,10 @@ type console struct {
 	// registers the sign-in redirect under.
 	consoleURL string
 
+	// platform is the sign-in client the deployment platform made, or nil
+	// when the setup wizard makes one. See connectIdentityProvider.
+	platform *config.PlatformClient
+
 	// sealer signs the console's cookies.
 	sealer *sealer
 
@@ -212,6 +216,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		adminGroup:    staffConfig.AdminGroup,
 		authentikURL:  oidcConfig.AuthentikURL,
 		consoleURL:    oidcConfig.ConsoleURL,
+		platform:      oidcConfig.Platform,
 		sealer:        seal,
 		secureCookies: strings.HasPrefix(oidcConfig.ConsoleURL, "https://"),
 		development:   common.Development,

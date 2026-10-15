@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/ylallemant/schmerz-reformen/internal/apiclient"
+	"github.com/ylallemant/schmerz-reformen/internal/config"
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
 )
 
@@ -84,7 +85,30 @@ func (c *console) useSignIn(s *signIn) {
 // directory should still start, say so, and serve its setup wizard if that is
 // what is wanted. And failing leaves it locked, not open — requireSignIn
 // refuses everybody while there is no sign-in.
+//
+// # When the deployment platform made the client
+//
+// With --oidc-client-id the console signs people in with the platform's client
+// and needs nothing from the backend to do so: the issuer, the id and the
+// secret are in its environment, and the redirect is its own address, which
+// the platform registers for every name the console answers on. The backend
+// still decides what anybody may do, from the directory, once its setup has
+// given it access — until then everybody who signs in holds nothing.
 func (c *console) connectIdentityProvider(ctx context.Context) error {
+	if c.platform != nil {
+		client, err := newSignIn(ctx, apiclient.AuthSettings{
+			Issuer: c.platform.Issuer, ClientID: c.platform.ClientID, ConsoleURL: c.consoleURL,
+		}, c.platform.ClientSecret)
+		if err != nil {
+			return err
+		}
+		c.useSignIn(client)
+		log.Info().Str("issuer", c.platform.Issuer).Str("client", c.platform.ClientID).
+			Str("redirect", client.oauth.RedirectURL).
+			Msg("editors sign in through the deployment platform's client")
+		return nil
+	}
+
 	backend := c.backend.AsConsole(c.staffToken)
 	settings, err := backend.AuthSettings(ctx)
 	if err != nil {
@@ -93,6 +117,11 @@ func (c *console) connectIdentityProvider(ctx context.Context) error {
 	if !settings.Provisioned {
 		log.Warn().Msg("no identity provider is configured: nobody can sign in to this console yet")
 		return nil
+	}
+	if settings.SignInByPlatform {
+		// Set up for a client this console was not given.
+		return fmt.Errorf("the backend was set up for the deployment platform's sign-in client, "+
+			"and this console has none: set %s and %s", config.KeyOIDCClientID, config.KeyOIDCClientSecret)
 	}
 	if settings.Issuer == "" {
 		return errors.New("the identity provider is configured and its settings cannot be read — see the backend's log")

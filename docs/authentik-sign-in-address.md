@@ -1,5 +1,11 @@
 # A sign-in address of its own — a handover
 
+> **Superseded on 2026-10-15.** The deployment platform now gives a project its
+> own sign-in address and brand (`auth.<zone>`), and schmerz-reformen's setup
+> binds its recovery flow to that brand. See
+> [platform-identity.md](platform-identity.md). What follows is kept for the
+> diagnosis, which still holds.
+
 Written for a session that will automate this. It describes the problem as it
 was met in production on 2026-10-15, why it happens, and the solution chosen:
 schmerz-reformen gets its own Authentik **brand** on its own domain, created

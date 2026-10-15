@@ -119,6 +119,18 @@ func ensureFirstAdmin(ctx context.Context, client *authentik.Client, first first
 // A wizard that failed halfway must be runnable again. The second attempt
 // finds what the first one made rather than colliding with it.
 //
+// # When the deployment platform made the sign-in
+//
+// With platformSignIn the console signs people in with a client the platform
+// made, and the administrators', users' and waiting groups are the
+// platform's: they carry its stamp, and the platform refuses to adopt a
+// group of the same name made by anybody else. So none of that is made here —
+// the groups are required, by name, and their absence is said rather than
+// filled — and what is provisioned is what the platform does not give yet:
+// the service account that makes the per-collective and per-organisation
+// groups, and the recovery flow, bound to the brand of the address this
+// site's people use.
+//
 // # The one flow it builds
 //
 // Flows are instance-wide and shared with every other application in the
@@ -126,7 +138,7 @@ func ensureFirstAdmin(ctx context.Context, client *authentik.Client, first first
 // because Authentik ships none and a recovery link is the only way this site
 // hands an account over. See authentik.EnsureRecoveryFlow.
 func provision(ctx context.Context, client *authentik.Client, consoleURL, appName string,
-	first firstAdmin) (Provisioning, error) {
+	first firstAdmin, platformSignIn bool) (Provisioning, error) {
 	var result Provisioning
 	result.InstanceURL = client.InstanceURL()
 	result.AppName = appName
@@ -153,6 +165,31 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 	}
 	result.Missing = found.Missing
 
+	// The platform's groups, required rather than made, and before anything
+	// is created: one made here would carry no stamp, and the platform's next
+	// reconcile would refuse it as "made by hand".
+	var platformAdmins authentik.Group
+	if platformSignIn {
+		result.Missing = nil // the flows a provider needs are not this run's concern
+		for i, name := range []string{adminGroupName, models.UsersGroupName(appName), models.PendingGroupName(appName)} {
+			group, err := client.GroupByName(ctx, name)
+			switch {
+			case errors.Is(err, authentik.ErrNotFound):
+				result.Missing = append(result.Missing, "the group "+name+
+					", which the deployment platform makes: run its identity reconcile first")
+			case err != nil:
+				return result, fmt.Errorf("find the group %s: %w", name, err)
+			case i == 0:
+				platformAdmins = group
+			}
+		}
+		if len(result.Missing) > 0 {
+			log.Warn().Strs("missing", result.Missing).
+				Msg("the platform's groups are not there yet; nothing was created")
+			return result, nil
+		}
+	}
+
 	if found.HasRecoveryFlow {
 		result.RecoveryReady = true
 	} else {
@@ -174,54 +211,59 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 		}
 	}
 
-	// What the ID token will be signed with, before anything is created: a
-	// provider with no signing key signs HS256 with the client secret, and the
-	// console cannot verify it. The first live run of this integration in
-	// doléances provisioned a complete directory and then failed every
-	// sign-in with `unexpected signature algorithm "HS256"`.
-	signingKey, err := client.SigningKey(ctx)
-	switch {
-	case errors.Is(err, authentik.ErrNotFound):
-		result.Missing = append(result.Missing,
-			"a certificate with a private key, which the provider needs to sign tokens")
-	case err != nil:
-		return result, fmt.Errorf("find a signing certificate: %w", err)
-	}
+	var provider authentik.Provider
+	var admins authentik.Group
+	if platformSignIn {
+		admins = platformAdmins
+	} else {
+		// What the ID token will be signed with, before anything is created:
+		// a provider with no signing key signs HS256 with the client secret,
+		// and the console cannot verify it. The first live run of this
+		// integration in doléances provisioned a complete directory and then
+		// failed every sign-in with `unexpected signature algorithm "HS256"`.
+		signingKey, err := client.SigningKey(ctx)
+		switch {
+		case errors.Is(err, authentik.ErrNotFound):
+			result.Missing = append(result.Missing,
+				"a certificate with a private key, which the provider needs to sign tokens")
+		case err != nil:
+			return result, fmt.Errorf("find a signing certificate: %w", err)
+		}
 
-	if !found.Ready() || signingKey == "" {
-		log.Warn().Strs("missing", result.Missing).
-			Msg("authentik is missing what a provider needs; nothing was created")
-		return result, nil
-	}
+		if !found.Ready() || signingKey == "" {
+			log.Warn().Strs("missing", result.Missing).
+				Msg("authentik is missing what a provider needs; nothing was created")
+			return result, nil
+		}
 
-	// No `email`: the console has no use for an editor's address, so its
-	// tokens do not carry one.
-	scopes, err := client.ScopeMappings(ctx, "openid", "profile")
-	if err != nil {
-		return result, fmt.Errorf("read the scope mappings: %w", err)
-	}
+		// No `email`: the console has no use for an editor's address, so
+		// its tokens do not carry one.
+		scopes, err := client.ScopeMappings(ctx, "openid", "profile")
+		if err != nil {
+			return result, fmt.Errorf("read the scope mappings: %w", err)
+		}
 
-	provider, err := client.EnsureProvider(ctx, authentik.ProviderSpec{
-		Name:              appName + " console",
-		RedirectURI:       strings.TrimSuffix(consoleURL, "/") + staffauth.CallbackPath,
-		AuthorizationFlow: found.AuthorizationFlow,
-		InvalidationFlow:  found.InvalidationFlow,
-		ScopeMappings:     scopes,
-		SigningKey:        signingKey,
-	})
-	if err != nil {
-		return result, err
-	}
-	result.Reconciled = append(result.Reconciled, provider.Repaired...)
-	app, err := client.EnsureApplication(ctx, appName+" console", appName, provider)
-	if err != nil {
-		return result, err
-	}
-	result.Reconciled = append(result.Reconciled, app.Repaired...)
+		provider, err = client.EnsureProvider(ctx, authentik.ProviderSpec{
+			Name:              appName + " console",
+			RedirectURI:       strings.TrimSuffix(consoleURL, "/") + staffauth.CallbackPath,
+			AuthorizationFlow: found.AuthorizationFlow,
+			InvalidationFlow:  found.InvalidationFlow,
+			ScopeMappings:     scopes,
+			SigningKey:        signingKey,
+		})
+		if err != nil {
+			return result, err
+		}
+		result.Reconciled = append(result.Reconciled, provider.Repaired...)
+		app, err := client.EnsureApplication(ctx, appName+" console", appName, provider)
+		if err != nil {
+			return result, err
+		}
+		result.Reconciled = append(result.Reconciled, app.Repaired...)
 
-	admins, err := client.EnsureGroup(ctx, adminGroupName)
-	if err != nil {
-		return result, err
+		if admins, err = client.EnsureGroup(ctx, adminGroupName); err != nil {
+			return result, err
+		}
 	}
 
 	admin := me
@@ -266,13 +308,16 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 	}
 
 	// The group of everybody who may use the console, so the first people
-	// can be added to it straight away.
-	if _, err := client.EnsureGroup(ctx, models.UsersGroupName(appName)); err != nil {
-		return result, err
-	}
-	// And the one self-made accounts wait in — not a role, see onboarding.go.
-	if _, err := client.EnsureGroup(ctx, models.PendingGroupName(appName)); err != nil {
-		return result, err
+	// can be added to it straight away, and the one self-made accounts wait
+	// in — not a role, see onboarding.go. The platform's, when it made the
+	// sign-in: found above.
+	if !platformSignIn {
+		if _, err := client.EnsureGroup(ctx, models.UsersGroupName(appName)); err != nil {
+			return result, err
+		}
+		if _, err := client.EnsureGroup(ctx, models.PendingGroupName(appName)); err != nil {
+			return result, err
+		}
 	}
 
 	if result.RecoveryReady {
@@ -298,6 +343,8 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 		APIToken:      apiToken,
 		AdminGroup:    admins.PK,
 		ProvisionedBy: admin.Username,
+
+		SignInByPlatform: platformSignIn,
 	}
 
 	log.Warn().

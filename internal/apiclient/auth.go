@@ -26,6 +26,10 @@ type AuthSettings struct {
 
 	// OnboardingDomains may make their own account; empty is nobody.
 	OnboardingDomains []string `json:"onboarding_domains"`
+
+	// SignInByPlatform says no client was made at setup: the console signs
+	// people in with the deployment platform's.
+	SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
 }
 
 // AuthSettings reads it. Needs a client made with AsConsole.
@@ -57,6 +61,10 @@ type ProvisionRequest struct {
 
 	// OnboardingDomains as typed: one per line or separated by commas.
 	OnboardingDomains string `json:"onboarding_domains,omitempty"`
+
+	// SignInByPlatform: the console has the platform's client, so setup
+	// makes none, and requires the platform's groups rather than making them.
+	SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
 }
 
 // Provisioning is what the backend did with it.

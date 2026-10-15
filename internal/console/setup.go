@@ -279,6 +279,10 @@ type wizardPage struct {
 	// or separated by commas.
 	OnboardingDomains string
 
+	// Platform says the deployment platform made the sign-in client and the
+	// static groups, so this run makes neither.
+	Platform bool
+
 	// What was done.
 	Done          bool
 	Result        apiclient.Provisioning
@@ -307,6 +311,7 @@ func (c *console) wizard(w http.ResponseWriter, r *http.Request) {
 		InstanceURL:  c.authentikURL,
 		ConsoleURL:   c.consoleURL,
 		CallbackPath: CallbackPath,
+		Platform:     c.platform != nil,
 	}
 	if !door.Open {
 		// Closed behind a wizard that finished in this process: the route
@@ -343,6 +348,7 @@ func (c *console) wizard(w http.ResponseWriter, r *http.Request) {
 		Reprovision:   door.Reprovision,
 
 		OnboardingDomains: strings.TrimSpace(r.PostFormValue("onboarding_domains")),
+		SignInByPlatform:  c.platform != nil,
 	}
 	if request.AppName == "" {
 		request.AppName = models.DefaultAppName

@@ -305,3 +305,58 @@ func TestAConsoleStartsKnowingNothingAboutItsIdentityProvider(t *testing.T) {
 		t.Errorf("AuthentikURL = %q with nothing set", got.AuthentikURL)
 	}
 }
+
+// TestThePlatformsClientComesWhole: an id with no secret, or either with no
+// issuer, would fail at the first sign-in in an editor's browser — refused at
+// startup instead. Neither is the ordinary case: the setup wizard's client.
+func TestThePlatformsClientComesWhole(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		env     map[string]string
+		want    bool
+		refused bool
+	}{
+		{"none", nil, false, false},
+		{"whole", map[string]string{
+			"SCHMERZ_OIDC_ISSUER":        "https://auth.example.org/application/o/schmerz/",
+			"SCHMERZ_OIDC_CLIENT_ID":     "schmerz",
+			"SCHMERZ_OIDC_CLIENT_SECRET": "a-secret",
+		}, true, false},
+		{"no secret", map[string]string{
+			"SCHMERZ_OIDC_ISSUER":    "https://auth.example.org/application/o/schmerz/",
+			"SCHMERZ_OIDC_CLIENT_ID": "schmerz",
+		}, false, true},
+		{"no issuer", map[string]string{
+			"SCHMERZ_OIDC_CLIENT_ID": "schmerz", "SCHMERZ_OIDC_CLIENT_SECRET": "a-secret",
+		}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+			Reset()
+			t.Cleanup(Reset)
+			RegisterCommonFlags(cmd, 8080, 8081)
+			RegisterOIDCFlags(cmd)
+			cmd.SetArgs(nil)
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if err := Bootstrap(cmd); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := LoadOIDC()
+			if (err != nil) != tc.refused {
+				t.Fatalf("err = %v, want refused %v", err, tc.refused)
+			}
+			if (got.Platform != nil) != tc.want {
+				t.Errorf("platform client = %+v, want one: %v", got.Platform, tc.want)
+			}
+			if tc.want && (got.Platform.ClientID != "schmerz" || got.AuthentikURL != "https://auth.example.org") {
+				t.Errorf("platform client %+v, wizard offered %q", got.Platform, got.AuthentikURL)
+			}
+		})
+	}
+}
