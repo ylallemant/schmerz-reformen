@@ -66,3 +66,26 @@ func (c *Client) host() string {
 	}
 	return parsed.Hostname()
 }
+
+// BrandStatus is what the console's sign-in page says about the brand this
+// client's address is answered by.
+type BrandStatus struct {
+	// Found is false when no brand answers this address at all.
+	Found   bool
+	Domain  string
+	Default bool
+
+	// RecoveryFlow is the flow it makes recovery links with, by key; empty
+	// when it has none, and then no way in can be made through it.
+	RecoveryFlow string
+}
+
+// Brand reads it. Reading only: binding a recovery flow to a brand needs a
+// permission this site's own account does not hold.
+func (c *Client) Brand(ctx context.Context) (BrandStatus, error) {
+	brand, ok, err := c.ownBrand(ctx)
+	if err != nil || !ok {
+		return BrandStatus{}, err
+	}
+	return BrandStatus{Found: true, Domain: brand.Domain, Default: brand.Default, RecoveryFlow: brand.RecoveryFlow}, nil
+}

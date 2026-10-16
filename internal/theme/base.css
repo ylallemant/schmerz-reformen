@@ -1563,6 +1563,13 @@ body > footer {
   margin: 0 0 1.5rem;
 }
 
+/* A warning inside a line of text — a check that did not pass — rather than
+   a box of its own. */
+.warning-text {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 /* Who is signed in, at the end of the console's navigation row. */
 .nav-identity {
   padding: 0.75rem 0.875rem;

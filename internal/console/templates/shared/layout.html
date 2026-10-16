@@ -74,6 +74,7 @@
       {{ if .Admin }}
       {{ template "navlink" dict "Page" . "Href" "/settings/people" "Key" "nav.people" }}
       {{ template "navlink" dict "Page" . "Href" "/settings/theme" "Key" "nav.theme" }}
+      {{ template "navlink" dict "Page" . "Href" "/settings/sign-in" "Key" "nav.sign_in" }}
       {{ end }}
       <span class="nav-spacer"></span>
       <span class="nav-identity">{{ .Editor }}</span>

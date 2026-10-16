@@ -239,6 +239,19 @@ func fakeBackend(t *testing.T, refuse bool) (*httptest.Server, *recorded) {
 	mux.HandleFunc("PUT /v1/staff/people/{pk}/approval", write(map[string]bool{"done": true}))
 	mux.HandleFunc("DELETE /v1/staff/people/{pk}/approval", write(map[string]bool{"done": true}))
 	mux.HandleFunc("PUT /v1/staff/onboarding", write(map[string]any{"domains": []string{"sozialratschlag.de"}}))
+	signIn := apiclient.SignInStatus{
+		Provisioned: true, AppName: hostile, StoredInstance: hostile, ConsoleURL: hostile,
+		StoredClientID: hostile, ProvisionedBy: hostile, ProvisionedAt: &when,
+		DirectoryAddress: hostile, DirectoryAccount: hostile, DirectoryFromEnv: true,
+		BrandDomain: hostile, BrandHasRecovery: false, RecoveryFlow: hostile,
+		Groups: []apiclient.SignInGroup{{Name: hostile, Exists: true}, {Name: "schmerz-pending", Exists: false}},
+		Differences: []apiclient.SignInDifference{
+			{Field: "instance_url", Stored: hostile, Effective: hostile},
+			{Field: "stored_token", Stored: "yes", Effective: "no"},
+		},
+	}
+	mux.HandleFunc("GET /v1/staff/sign-in", func(w http.ResponseWriter, _ *http.Request) { answer(w, signIn) })
+	mux.HandleFunc("PUT /v1/staff/sign-in", write(signIn))
 	mux.HandleFunc("GET /v1/console/auth", func(w http.ResponseWriter, _ *http.Request) {
 		answer(w, apiclient.AuthSettings{Provisioned: true, OnboardingDomains: []string{"sozialratschlag.de"}})
 	})
@@ -423,6 +436,8 @@ func TestEveryConsolePageRendersAndEscapesWhatEditorsTyped(t *testing.T) {
 		{path: "/auth/signed-out", plain: true},
 		{path: "/auth/signed-out?failed=1", plain: true},
 		{path: "/auth/join", plain: true},
+		{path: "/settings/sign-in"},
+		{path: "/settings/sign-in#de"},
 		{path: "/auth/join#de", plain: true},
 		{path: "/#en"},
 		{path: "/topics/t1#en"},

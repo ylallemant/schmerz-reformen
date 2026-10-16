@@ -210,3 +210,33 @@ func TestARefusedJoinKeepsWhatWasTyped(t *testing.T) {
 		}
 	}
 }
+
+// TestTheSignInPageAlignsAndNothingElse: it shows what setup stored beside
+// what is used, and its one action sends nothing but what the console knows of
+// itself — no address, no client, no secret.
+func TestTheSignInPageAlignsAndNothingElse(t *testing.T) {
+	backend, log := fakeBackend(t, false)
+	console := served(t, backend.URL)
+
+	_, rendered := get(t, console, "/settings/sign-in")
+	for _, want := range []string{`action="/settings/sign-in"`, "nobody can be given a way in", "missing"} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("the page does not show %q", want)
+		}
+	}
+
+	response, _ := post(t, console, "/settings/sign-in", url.Values{
+		"action": {"align"}, "instance_url": {"https://attacker.example"}, "client_id": {"theirs"},
+	})
+	if response.StatusCode != http.StatusSeeOther || response.Header.Get("Location") != "/settings/sign-in?notice=aligned" {
+		t.Fatalf("aligning = %d to %q", response.StatusCode, response.Header.Get("Location"))
+	}
+	sent, ok := log.last(http.MethodPut, "/v1/staff/sign-in")
+	if !ok || len(sent.Body) != 1 || sent.Body["console_platform"] != false {
+		t.Errorf("sent %v, want only whether the console has the platform's client", sent.Body)
+	}
+
+	if response, _ := get(t, served(t, backend.URL, "schmerz-collective-buendnis-admins"), "/settings/sign-in"); response.StatusCode != http.StatusForbidden {
+		t.Errorf("a non-administrator opening the page = %d, want 403", response.StatusCode)
+	}
+}

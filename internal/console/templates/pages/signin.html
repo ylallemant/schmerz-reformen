@@ -1,0 +1,107 @@
+{{define "content"}}
+{{ $page := . }}
+{{ $s := .Status }}
+<h1>{{ .T "signin.title" }}</h1>
+<p class="lede">{{ .T "signin.lede" }}</p>
+
+{{ if not $s.Provisioned }}
+<p class="warning" role="status">{{ .T "signin.not_set_up" }}</p>
+{{ else }}
+
+{{/* Whether somebody can be handed a way in, first: it is the question an
+     administrator comes here with, and the one a stale setting answers
+     wrong without anything else looking amiss. */}}
+<h2>{{ .T "signin.ready_title" }}</h2>
+{{ if $s.DirectoryProblem }}
+<p class="warning" role="status">{{ $s.DirectoryProblem }}</p>
+{{ else }}
+<dl class="facts">
+  <dt>{{ .T "signin.directory" }}</dt>
+  <dd><code class="mono wrap-anywhere">{{ $s.DirectoryAddress }}</code>
+    <span class="hint">{{ if $s.DirectoryFromEnv }}{{ .Tf "signin.directory_platform" "Account" $s.DirectoryAccount }}{{ else }}{{ .Tf "signin.directory_setup" "Account" $s.DirectoryAccount }}{{ end }}</span></dd>
+
+  <dt>{{ .T "signin.brand" }}</dt>
+  <dd><code class="mono">{{ $s.BrandDomain }}</code>
+    {{ if $s.BrandIsDefault }}<span class="hint">{{ .T "signin.brand_default" }}</span>{{ end }}</dd>
+
+  <dt>{{ .T "signin.recovery" }}</dt>
+  <dd>
+    {{ if and $s.BrandHasRecovery $s.RecoveryFlowIsOurs }}
+    <span>{{ .Tf "signin.recovery_ours" "Flow" $s.RecoveryFlow }}</span>
+    {{ else if $s.BrandHasRecovery }}
+    <span class="warning-text">{{ .T "signin.recovery_other" }}</span>
+    {{ else }}
+    <span class="warning-text">{{ .T "signin.recovery_none" }}</span>
+    {{ end }}
+    {{ if $s.RecoveryFlowMissing }}<br><span class="hint">{{ .T "signin.recovery_flow_missing" }}</span>{{ end }}
+  </dd>
+
+  <dt>{{ .T "signin.groups" }}</dt>
+  <dd>
+    {{ range $s.Groups }}
+    <code class="mono">{{ .Name }}</code>{{ if not .Exists }} <span class="warning-text">{{ $page.T "signin.group_missing" }}</span>{{ end }}<br>
+    {{ end }}
+  </dd>
+</dl>
+{{ if not (and $s.BrandHasRecovery $s.RecoveryFlowIsOurs) }}
+<p class="section-note">{{ .T "signin.recovery_hint" }}</p>
+{{ end }}
+{{ end }}
+
+<h2>{{ .T "signin.sign_in_title" }}</h2>
+<dl class="facts">
+  <dt>{{ .T "signin.client" }}</dt>
+  <dd>
+    {{ if .ConsoleClient }}
+    <code class="mono">{{ .ConsoleClient }}</code> <span class="hint">{{ .T "signin.client_platform" }}</span><br>
+    <code class="mono wrap-anywhere">{{ .ConsoleIssuer }}</code>
+    {{ else }}
+    <code class="mono">{{ $s.StoredClientID }}</code> <span class="hint">{{ .T "signin.client_setup" }}</span>
+    {{ end }}
+  </dd>
+</dl>
+
+{{/* The one thing this page changes, and only towards what the deployment
+     already gives: no field here is typed. */}}
+<h2 id="stored">{{ .T "signin.stored_title" }}</h2>
+{{ if $s.Differences }}
+<p class="section-note">{{ .T "signin.differences_lede" }}</p>
+<div class="table-wrap">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th scope="col">{{ .T "signin.setting" }}</th>
+        <th scope="col">{{ .T "signin.stored" }}</th>
+        <th scope="col">{{ .T "signin.effective" }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ range $s.Differences }}
+      <tr>
+        <td>{{ $page.T (printf "signin.field.%s" .Field) }}</td>
+        <td><code class="mono wrap-anywhere">{{ .Stored }}</code></td>
+        <td><code class="mono wrap-anywhere">{{ if .Effective }}{{ .Effective }}{{ else }}—{{ end }}</code></td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+<form method="post" action="/settings/sign-in" data-confirm="{{ .T "signin.align_confirm" }}">
+  <button class="button" type="submit" name="action" value="align">{{ .T "signin.align" }}</button>
+</form>
+{{ else }}
+<p class="section-note">{{ .T "signin.in_line" }}</p>
+{{ end }}
+
+<dl class="facts">
+  <dt>{{ .T "signin.app_name" }}</dt><dd><code class="mono">{{ $s.AppName }}</code></dd>
+  <dt>{{ .T "signin.stored_instance" }}</dt><dd><code class="mono wrap-anywhere">{{ $s.StoredInstance }}</code></dd>
+  <dt>{{ .T "signin.console_url" }}</dt><dd><code class="mono wrap-anywhere">{{ $s.ConsoleURL }}</code></dd>
+  {{ if not .ProvisionedAt.IsZero }}
+  <dt>{{ .T "signin.provisioned" }}</dt><dd>{{ $page.ShortDate .ProvisionedAt }}{{ if $s.ProvisionedBy }} · {{ $s.ProvisionedBy }}{{ end }}</dd>
+  {{ end }}
+</dl>
+
+<p class="section-note">{{ .T "signin.repoint_hint" }}</p>
+{{ end }}
+{{end}}

@@ -78,6 +78,7 @@ var changesNothingCached = map[string]string{
 	"staff-approve-person":         "the directory, not the site's content",
 	"staff-refuse-person":          "the directory, not the site's content",
 	"staff-set-onboarding-domains": "the sign-in settings, which nothing caches",
+	"staff-align-sign-in":          "the sign-in settings, which nothing caches",
 	"console-onboard":              "the directory, not the site's content",
 	"staff-collective-grant":       "the directory, not the site's content",
 	"staff-collective-revoke":      "the directory, not the site's content",

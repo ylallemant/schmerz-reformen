@@ -28,12 +28,13 @@ func TestTranslationsRespectTheLengthBudget(t *testing.T) {
 func TestEveryKeyTheConsoleAsksForIsDefined(t *testing.T) {
 	var enumerated []string
 	for prefix, values := range map[string][]string{
-		"status":      statuses,
-		"kind":        topicKinds,
-		"level":       levels,
-		"action_kind": actionKinds,
-		"member_kind": memberKinds,
-		"role":        {"collective_admin", "collective_author", "organisation_admin", "organisation_member"},
+		"status":       statuses,
+		"kind":         topicKinds,
+		"level":        levels,
+		"action_kind":  actionKinds,
+		"member_kind":  memberKinds,
+		"signin.field": {"instance_url", "directory_by_platform", "stored_token", "sign_in_by_platform", "stored_client"},
+		"role":         {"collective_admin", "collective_author", "organisation_admin", "organisation_member"},
 	} {
 		for _, value := range values {
 			enumerated = append(enumerated, prefix+"."+value)

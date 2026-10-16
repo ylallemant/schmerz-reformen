@@ -327,6 +327,7 @@ func (c *console) registerRoutes(mux *http.ServeMux) error {
 	c.registerActionRoutes(mux)
 	c.registerThemeRoutes(mux)
 	c.registerPeopleRoutes(mux)
+	c.registerSignInRoutes(mux)
 
 	mux.Handle("GET /audit", c.localized(c.audit))
 	return nil
@@ -429,6 +430,7 @@ var noticeKeys = map[string]string{
 	"logo":     "notice.logo",
 	"removed":  "notice.removed",
 	"approved": "notice.approved",
+	"aligned":  "notice.aligned",
 	"refused":  "notice.refused",
 }
 

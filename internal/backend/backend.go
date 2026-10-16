@@ -409,6 +409,7 @@ func (a *API) registerOperations(api huma.API) {
 	a.registerAuthRoutes(api)
 	a.registerPeopleRoutes(api)
 	a.registerOnboardingRoutes(api)
+	a.registerSignInRoutes(api)
 }
 
 // sweepInterval is how often expired rows are removed. Nothing depends on the

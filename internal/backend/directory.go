@@ -207,7 +207,15 @@ func (a *API) useDirectory(settings models.AuthSettings) {
 		}
 		a.setAdminGroup(name)
 	}
-	log.Info().Str("instance", settings.InstanceURL).Str("application", settings.AppName).
+	// The address actually used: the environment's when the platform gives
+	// it. Logging the stored one there read as the backend still talking to
+	// the old address.
+	instance := settings.InstanceURL
+	if client, _ := a.directory.connected(); client != nil {
+		instance = client.InstanceURL()
+	}
+	log.Info().Str("instance", instance).Str("stored_instance", settings.InstanceURL).
+		Str("application", settings.AppName).Bool("platform_account", a.directory.access != nil).
 		Msg("identity provider connected: editors' groups are read from it")
 }
 

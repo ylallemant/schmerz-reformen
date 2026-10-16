@@ -121,6 +121,24 @@ Nothing here has been run. Each step is an operator's, against shared state.
    used `auth.codersyndicate.cloud` sets one up again on the new address, from a
    link minted on the People page.
 
+## After the switch: the console's sign-in page
+
+*Settings → Sign-in* (`/settings/sign-in`, site administrators) shows what
+setup stored beside what is used — the directory's address and whose account
+reaches it, the brand that answers that address and whether it has a recovery
+flow, the static groups — and lists every stored value the deployment says
+otherwise. **Bring in line with the deployment** replaces those with the
+deployment's: the platform's address, no stored token, no stored client, the
+two `…ByPlatform` flags. It takes nothing typed; pointing the site at another
+directory stays the wizard's.
+
+**Still open, on the platform's side:** the brand the platform makes on
+`auth.<zone>` carries no recovery flow, and this site's service account may
+only *view* brands (`authentik_brands.view_brand`), so it cannot bind one.
+Until the platform's identity reconcile binds the project's own flow —
+`schmerz-recovery`, i.e. `<prefix>-recovery` — no invite link can be made on
+the project's address, and the page says so.
+
 ## Checking it worked
 
 - An invite link from the People page reads
