@@ -60,6 +60,10 @@
       "$type": "color",
       "$value": "#3b0764"
     },
+    "mark-organisation": {
+      "$type": "color",
+      "$value": "#0e7490"
+    },
     "on-mark": {
       "$type": "color",
       "$value": "#ffffff"
@@ -141,6 +145,10 @@
     "mark-collective": {
       "$type": "color",
       "$value": "#e9d5ff"
+    },
+    "mark-organisation": {
+      "$type": "color",
+      "$value": "#67e8f9"
     },
     "on-mark": {
       "$type": "color",

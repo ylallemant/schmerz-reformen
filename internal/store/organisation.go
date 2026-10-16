@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/ylallemant/schmerz-reformen/internal/geo"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 )
 
@@ -48,6 +49,14 @@ type OrganisationQuery struct {
 	// non-nil slice means none at all.
 	IDs []string
 
+	// Listed limits the listing to organisations a published collective
+	// lists: the ones that are public, because an organisation has no page of
+	// its own and is shown only as somebody's member.
+	Listed bool
+
+	// Bounds limits the listing to a map viewport. Nil means everywhere.
+	Bounds *geo.Box
+
 	Page
 }
 
@@ -67,16 +76,74 @@ func (s *Store) ListOrganisations(ctx context.Context, query OrganisationQuery) 
 	if query.IDs != nil {
 		db = db.Where("id IN ?", query.IDs)
 	}
+	if query.Listed {
+		db = db.Where("id IN (?)", s.listedOrganisations(ctx))
+	}
 
+	// Counted before the viewport narrows it: see ListTopics for why a map
+	// narrows what is drawn and never what is counted.
 	var total int64
 	if err := db.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
-	var organisations []models.Organisation
+	db, box := s.inViewport(db, query.Bounds)
+
+	var candidates []models.Organisation
 	err := db.Order("name asc, id asc").Limit(page.Limit).Offset(page.Offset).
-		Find(&organisations).Error
-	return organisations, total, err
+		Find(&candidates).Error
+	if err != nil || box == nil {
+		return candidates, total, err
+	}
+	organisations := make([]models.Organisation, 0, len(candidates))
+	for _, organisation := range candidates {
+		if box.Contains(organisation.Location.Latitude, organisation.Location.Longitude) {
+			organisations = append(organisations, organisation)
+		}
+	}
+	return organisations, total, nil
+}
+
+// listedOrganisations is the subquery of organisations a published
+// collective lists.
+func (s *Store) listedOrganisations(ctx context.Context) *gorm.DB {
+	published := s.db.WithContext(ctx).Model(&models.Collective{}).
+		Select("id").Where("status = ?", models.StatusPublished)
+	return s.db.WithContext(ctx).Model(&models.CollectiveMember{}).
+		Select("organisation_id").Where("collective_id IN (?)", published)
+}
+
+// PublishedCollectivesOf returns, for each organisation, the published
+// collectives that list it, by name — what a reader can follow to see the
+// organisation at work. An organisation no published collective lists has no
+// entry.
+func (s *Store) PublishedCollectivesOf(ctx context.Context, organisationIDs []string) (map[string][]models.Collective, error) {
+	out := map[string][]models.Collective{}
+	if len(organisationIDs) == 0 {
+		return out, nil
+	}
+	var members []models.CollectiveMember
+	if err := s.db.WithContext(ctx).Where("organisation_id IN ?", organisationIDs).
+		Find(&members).Error; err != nil {
+		return nil, err
+	}
+	collectiveIDs := make([]string, 0, len(members))
+	for _, member := range members {
+		collectiveIDs = append(collectiveIDs, member.CollectiveID)
+	}
+	var collectives []models.Collective
+	if err := s.db.WithContext(ctx).Where("id IN ? AND status = ?", collectiveIDs, models.StatusPublished).
+		Order("name asc").Find(&collectives).Error; err != nil {
+		return nil, err
+	}
+	for _, collective := range collectives {
+		for _, member := range members {
+			if member.CollectiveID == collective.ID {
+				out[member.OrganisationID] = append(out[member.OrganisationID], collective)
+			}
+		}
+	}
+	return out, nil
 }
 
 // OrganisationsByID returns the named organisations, keyed by identifier.

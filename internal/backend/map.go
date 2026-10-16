@@ -19,9 +19,10 @@ func (a *API) registerMapRoutes(api huma.API) {
 		Method:      http.MethodGet,
 		Path:        "/v1/map",
 		Summary:     "Read everything a map viewport shows",
-		Description: "Topics, upcoming actions and collectives pinned inside `bounds`, in one " +
-			"answer, with the totals of each across the whole site. The totals never shrink " +
-			"with the viewport: how many there are is the point of putting them on one map.",
+		Description: "Topics, upcoming actions, collectives and the organisations published " +
+			"collectives list, pinned inside `bounds`, in one answer, with the totals of each " +
+			"across the whole site. The totals never shrink with the viewport: how many there " +
+			"are is the point of putting them on one map.",
 		Tags: []string{"Map"},
 	}, a.readMap)
 }
@@ -29,12 +30,31 @@ func (a *API) registerMapRoutes(api huma.API) {
 // MapOutput is one viewport.
 type MapOutput struct {
 	Body struct {
-		Topics      []TopicItem      `json:"topics"`
-		Actions     []ActionItem     `json:"actions"`
-		Collectives []CollectiveItem `json:"collectives"`
+		Topics        []TopicItem           `json:"topics"`
+		Actions       []ActionItem          `json:"actions"`
+		Collectives   []CollectiveItem      `json:"collectives"`
+		Organisations []MapOrganisationItem `json:"organisations"`
 
 		Totals MapTotals `json:"totals"`
 	}
+}
+
+// MapOrganisationItem is an organisation as the public map shows it: what it
+// is, where, and the published collectives it is part of — which is how a
+// reader reaches it, since an organisation has no page of its own.
+//
+// Not OrganisationItem, which is the console's and carries the groups that
+// decide who runs it: nothing a reader has any use for.
+type MapOrganisationItem struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Kind      string          `json:"kind"`
+	Website   string          `json:"website,omitempty"`
+	LogoID    string          `json:"logo_id,omitempty"`
+	Place     string          `json:"place,omitempty"`
+	Latitude  float64         `json:"latitude"`
+	Longitude float64         `json:"longitude"`
+	In        []CollectiveRef `json:"collectives"`
 }
 
 // MapTotals is how much there is, everywhere.
@@ -42,6 +62,9 @@ type MapTotals struct {
 	Topics      int64 `json:"topics"`
 	Actions     int64 `json:"actions"`
 	Collectives int64 `json:"collectives"`
+
+	// Organisations counts the organisations a published collective lists.
+	Organisations int64 `json:"organisations"`
 
 	// Amount is the sum of the money at stake across every published topic
 	// that gave a figure, in whole euros.
@@ -57,7 +80,14 @@ type mapListing struct {
 	topics      topicListing
 	actions     actionListing
 	collectives collectiveListing
-	amount      int64
+
+	// organisations are those a published collective lists, in view, each
+	// with the published collectives that list it.
+	organisations     []models.Organisation
+	organisationsIn   map[string][]models.Collective
+	organisationTotal int64
+
+	amount int64
 }
 
 // mapLimit bounds each layer of one viewport. Past a few hundred markers a map
@@ -99,6 +129,23 @@ func (a *API) readMap(ctx context.Context, in *BoundsInput) (*MapOutput, error) 
 			return mapListing{}, err
 		}
 
+		// Only what a published collective lists: an organisation is public
+		// as somebody's member and in no other way.
+		organisations, organisationTotal, err := a.store.ListOrganisations(ctx, store.OrganisationQuery{
+			Listed: true, Bounds: box, Page: store.Page{Limit: mapLimit},
+		})
+		if err != nil {
+			return mapListing{}, err
+		}
+		organisationIDs := make([]string, 0, len(organisations))
+		for _, organisation := range organisations {
+			organisationIDs = append(organisationIDs, organisation.ID)
+		}
+		organisationsIn, err := a.store.PublishedCollectivesOf(ctx, organisationIDs)
+		if err != nil {
+			return mapListing{}, err
+		}
+
 		amount, err := a.store.TotalAmount(ctx)
 		if err != nil {
 			// A figure in the header is not worth an empty map.
@@ -113,7 +160,12 @@ func (a *API) readMap(ctx context.Context, in *BoundsInput) (*MapOutput, error) 
 			topics:      topicListing{topics: topics, owners: a.ownersOf(ctx, ownerIDs), total: topicTotal},
 			actions:     actions,
 			collectives: collectiveListing{collectives: collectives, total: collectiveTotal},
-			amount:      amount,
+
+			organisations:     organisations,
+			organisationsIn:   organisationsIn,
+			organisationTotal: organisationTotal,
+
+			amount: amount,
 		}, nil
 	})
 	if err != nil {
@@ -123,10 +175,11 @@ func (a *API) readMap(ctx context.Context, in *BoundsInput) (*MapOutput, error) 
 
 	out := &MapOutput{}
 	out.Body.Totals = MapTotals{
-		Topics:      listing.topics.total,
-		Actions:     listing.actions.total,
-		Collectives: listing.collectives.total,
-		Amount:      listing.amount,
+		Topics:        listing.topics.total,
+		Actions:       listing.actions.total,
+		Collectives:   listing.collectives.total,
+		Organisations: listing.organisationTotal,
+		Amount:        listing.amount,
 	}
 
 	visible := listing.topics.visible()
@@ -149,6 +202,26 @@ func (a *API) readMap(ctx context.Context, in *BoundsInput) (*MapOutput, error) 
 		item := toCollectiveItem(collective)
 		item.Description = ""
 		out.Body.Collectives = append(out.Body.Collectives, item)
+	}
+
+	out.Body.Organisations = make([]MapOrganisationItem, 0, len(listing.organisations))
+	for _, organisation := range listing.organisations {
+		// Placed, because a marker needs a point. One with no place is still
+		// counted, and still on every collective page that lists it.
+		if !organisation.Location.Placed() {
+			continue
+		}
+		item := MapOrganisationItem{
+			ID: organisation.ID, Name: organisation.Name, Kind: string(organisation.Kind),
+			Website: organisation.Website, LogoID: organisation.LogoID,
+			Place:    organisation.Location.Label,
+			Latitude: organisation.Location.Latitude, Longitude: organisation.Location.Longitude,
+			In: []CollectiveRef{},
+		}
+		for _, collective := range listing.organisationsIn[organisation.ID] {
+			item.In = append(item.In, CollectiveRef{ID: collective.ID, Name: collective.Name, Slug: collective.Slug})
+		}
+		out.Body.Organisations = append(out.Body.Organisations, item)
 	}
 	return out, nil
 }

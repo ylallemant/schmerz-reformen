@@ -28,10 +28,14 @@
     <span class="stat-value">{{ .Count .Totals.Collectives }}</span>
     <span class="stat-label">{{ .T "landing.stat_collectives" }}</span>
   </li>
+  <li>
+    <span class="stat-value">{{ .Count .Totals.Organisations }}</span>
+    <span class="stat-label">{{ .T "landing.stat_organisations" }}</span>
+  </li>
 </ul>
 
 <section aria-label="{{ .T "nav.map" }}">
-  {{/* Which of the three kinds of thing are drawn. Checkboxes, so each works
+  {{/* Which of the four kinds of thing are drawn. Checkboxes, so each works
        with the keyboard and says what it is to a screen reader; the chip
        around each is what is seen. Each carries its marker's shape, because
        the shape — not the colour — is what tells them apart. */}}
@@ -42,6 +46,8 @@
       <span class="pin action legend" aria-hidden="true"></span>{{ .T "map.layer_actions" }}</label>
     <label class="chip"><input type="checkbox" value="collective" checked>
       <span class="pin collective legend" aria-hidden="true"></span>{{ .T "map.layer_collectives" }}</label>
+    <label class="chip"><input type="checkbox" value="organisation" checked>
+      <span class="pin organisation legend" aria-hidden="true"></span>{{ .T "map.layer_organisations" }}</label>
   </div>
 
   <div id="map" class="map" data-endpoint="/api/map"

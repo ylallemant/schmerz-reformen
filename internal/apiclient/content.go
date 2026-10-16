@@ -334,18 +334,34 @@ func (c *Client) GetAction(ctx context.Context, id string) (Action, error) {
 
 // MapTotals is how much there is, everywhere.
 type MapTotals struct {
-	Topics      int64 `json:"topics"`
-	Actions     int64 `json:"actions"`
-	Collectives int64 `json:"collectives"`
-	Amount      int64 `json:"amount"`
+	Topics        int64 `json:"topics"`
+	Actions       int64 `json:"actions"`
+	Collectives   int64 `json:"collectives"`
+	Organisations int64 `json:"organisations"`
+	Amount        int64 `json:"amount"`
+}
+
+// MapOrganisation is an organisation as the public map shows it, with the
+// published collectives it is part of.
+type MapOrganisation struct {
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
+	Kind      string          `json:"kind"`
+	Website   string          `json:"website,omitempty"`
+	LogoID    string          `json:"logo_id,omitempty"`
+	Place     string          `json:"place,omitempty"`
+	Latitude  float64         `json:"latitude"`
+	Longitude float64         `json:"longitude"`
+	In        []CollectiveRef `json:"collectives"`
 }
 
 // MapView is what one viewport shows.
 type MapView struct {
-	Topics      []Topic      `json:"topics"`
-	Actions     []Action     `json:"actions"`
-	Collectives []Collective `json:"collectives"`
-	Totals      MapTotals    `json:"totals"`
+	Topics        []Topic           `json:"topics"`
+	Actions       []Action          `json:"actions"`
+	Collectives   []Collective      `json:"collectives"`
+	Organisations []MapOrganisation `json:"organisations"`
+	Totals        MapTotals         `json:"totals"`
 }
 
 // ReadMap returns everything pinned inside a viewport, given as

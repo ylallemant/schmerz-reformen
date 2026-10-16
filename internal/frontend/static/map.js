@@ -2,7 +2,8 @@
 //
 // Two kinds of map are drawn from this file. The main one — the landing page —
 // asks the site what is in view every time the reader moves it, and draws
-// three layers: topics, actions and collectives. The small ones illustrate a
+// four layers: topics, actions, collectives and the organisations they are
+// made of. The small ones illustrate a
 // single place on a topic's or an action's own page.
 //
 // Everything a popup says arrives already worded from the server, in the
@@ -36,7 +37,7 @@
   }
 
   // A marker is a colour and a shape: a topic is a diamond, an action a
-  // circle, a collective a square. The shape is the part that matters — the
+  // circle, a collective a square, an organisation a leaf. The shape is the part that matters — the
   // stylesheet draws it from the class — and the glyph inside says the same
   // thing a third way: an action carries the day it happens on.
   function pin(layer, glyph) {
@@ -84,11 +85,16 @@
     }
 
     var title = element("h3", "card-title");
-    var link = element("a", "", item.title);
-    // The address is one the server built from an identifier; it is assigned
-    // as a property, never concatenated into markup.
-    link.href = item.href;
-    title.appendChild(link);
+    if (item.href) {
+      var link = element("a", "", item.title);
+      // The address is one the server built from an identifier; it is
+      // assigned as a property, never concatenated into markup.
+      link.href = item.href;
+      title.appendChild(link);
+    } else {
+      // An organisation has no page of its own: its links follow.
+      title.textContent = item.title;
+    }
     card.appendChild(title);
 
     if (item.meta) {
@@ -96,6 +102,17 @@
     }
     if (item.text) {
       card.appendChild(element("p", "card-text", item.text));
+    }
+    if (item.links && item.links.length) {
+      var list = element("ul", "map-links");
+      item.links.forEach(function (target) {
+        var entry = element("li");
+        var anchor = element("a", "", target.text);
+        anchor.href = target.href;
+        entry.appendChild(anchor);
+        list.appendChild(entry);
+      });
+      card.appendChild(list);
     }
     return card;
   }

@@ -536,6 +536,10 @@ h3 {
   border-left: 3px solid var(--mark-collective);
 }
 
+.tag.organisation {
+  border-left: 3px solid var(--mark-organisation);
+}
+
 /* --- pills: the state of a row --- */
 .pill {
   display: inline-block;
@@ -1427,10 +1431,17 @@ input[type="number"] {
   margin: 0;
 }
 
+/* Where an organisation, which has no page, leads: its collectives. */
+.map-popup .map-links {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+
 /* --- markers ---
  *
- * Three kinds of thing are on the map and each is a colour **and a shape**:
- * a topic is a diamond, an action a circle, a collective a square. The shape
+ * Four kinds of thing are on the map and each is a colour **and a shape**:
+ * a topic is a diamond, an action a circle, a collective a square, an
+ * organisation a leaf — two opposite corners rounded. The shape
  * is the part that matters — somebody who cannot tell violet from blue, or is
  * looking at the map in sunlight, reads the outline. The glyph inside says the
  * same thing a third way.
@@ -1474,6 +1485,11 @@ input[type="number"] {
 .pin.collective {
   background: var(--mark-collective);
   border-radius: 4px;
+}
+
+.pin.organisation {
+  background: var(--mark-organisation);
+  border-radius: 50% 2px;
 }
 
 /* In a legend or a chip a marker is an illustration, drawn smaller. */

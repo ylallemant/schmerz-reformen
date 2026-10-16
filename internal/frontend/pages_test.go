@@ -86,7 +86,11 @@ func fakeBackend(t *testing.T) *httptest.Server {
 		answer(w, apiclient.MapView{
 			Topics: []apiclient.Topic{topic}, Actions: []apiclient.Action{action, cancelled},
 			Collectives: []apiclient.Collective{collective},
-			Totals:      apiclient.MapTotals{Topics: 412, Actions: 37, Collectives: 58, Amount: 2_500_000_000},
+			Organisations: []apiclient.MapOrganisation{{
+				ID: "o1", Name: hostile, Kind: "union", Place: hostile, Latitude: 51.22, Longitude: 6.77,
+				In: []apiclient.CollectiveRef{{ID: "c1", Name: hostile, Slug: "buendnis"}},
+			}},
+			Totals: apiclient.MapTotals{Topics: 412, Actions: 37, Collectives: 58, Organisations: 96, Amount: 2_500_000_000},
 		})
 	})
 	mux.HandleFunc("GET /v1/collectives", func(w http.ResponseWriter, _ *http.Request) {
@@ -499,16 +503,30 @@ func TestTheMapIsHandedWordsNotMarkup(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&answer); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(answer.Items) != 4 {
-		t.Fatalf("%d items, want a topic, two actions and a collective", len(answer.Items))
+	if len(answer.Items) != 5 {
+		t.Fatalf("%d items, want a topic, two actions, a collective and an organisation", len(answer.Items))
 	}
 
+	sitePage := func(href string) bool { return strings.HasPrefix(href, "/") && !strings.HasPrefix(href, "//") }
 	layers := map[string]mapItem{}
 	for _, item := range answer.Items {
 		layers[item.Layer] = item
-		if !strings.HasPrefix(item.Href, "/") || strings.HasPrefix(item.Href, "//") {
+		// An organisation has no page of its own; everything else does.
+		if item.Layer != "organisation" && !sitePage(item.Href) {
 			t.Errorf("an item links to %q, which is not a page of this site", item.Href)
 		}
+		for _, link := range item.Links {
+			if !sitePage(link.Href) {
+				t.Errorf("a popup links to %q, which is not a page of this site", link.Href)
+			}
+		}
+	}
+
+	// An organisation leads to the collectives it is part of.
+	organisation := layers["organisation"]
+	if organisation.Href != "" || organisation.Tag != "Gewerkschaft" || len(organisation.Links) != 1 ||
+		organisation.Links[0].Href != "/collectives/buendnis" || organisation.Text == "" {
+		t.Errorf("organisation = %+v", organisation)
 	}
 
 	topic := layers["topic"]
@@ -519,7 +537,8 @@ func TestTheMapIsHandedWordsNotMarkup(t *testing.T) {
 		t.Errorf("figure = %q, want the amount as a loss with a real minus sign", topic.Figure)
 	}
 	// The totals are of everything, whatever the viewport.
-	if !strings.Contains(answer.Status, "412") || !strings.Contains(answer.Status, "58") {
+	if !strings.Contains(answer.Status, "412") || !strings.Contains(answer.Status, "58") ||
+		!strings.Contains(answer.Status, "96") {
 		t.Errorf("status = %q, want the totals in words", answer.Status)
 	}
 

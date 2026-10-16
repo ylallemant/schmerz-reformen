@@ -54,6 +54,7 @@
   --mark-topic: #7c3aed;
   --mark-action: #2563eb;
   --mark-collective: #312e81;
+  --mark-organisation: #0e7490;
   --on-mark: #ffffff;
 
   /* The ground an uploaded logo sits on. Light in both modes, and that is the
@@ -85,6 +86,7 @@
     --mark-topic: #a78bfa;
     --mark-action: #60a5fa;
     --mark-collective: #c7d2fe;
+    --mark-organisation: #67e8f9;
     --on-mark: #14112e;
     --logo-ground: #f1efff;
     --error: #ff8a80;
@@ -110,6 +112,7 @@
   --mark-topic: #a78bfa;
   --mark-action: #60a5fa;
   --mark-collective: #c7d2fe;
+  --mark-organisation: #67e8f9;
   --on-mark: #14112e;
   --logo-ground: #f1efff;
   --error: #ff8a80;

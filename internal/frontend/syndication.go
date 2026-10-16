@@ -231,6 +231,17 @@ type mapItem struct {
 
 	// Cancelled marks an action that is off, so the popup can say so.
 	Cancelled bool `json:"cancelled,omitempty"`
+
+	// Links are further pages the popup leads to, under Text: for an
+	// organisation, which has no page of its own, the collectives it is part
+	// of. Href is then empty and the title is not a link.
+	Links []mapLink `json:"links,omitempty"`
+}
+
+// mapLink is one of them: the words, and an address the server built.
+type mapLink struct {
+	Text string `json:"text"`
+	Href string `json:"href"`
 }
 
 // mapAnswer is one viewport.
@@ -313,10 +324,34 @@ func (s *site) mapJSON(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	for _, organisation := range view.Organisations {
+		item := mapItem{
+			Layer:     "organisation",
+			Latitude:  organisation.Latitude,
+			Longitude: organisation.Longitude,
+			Title:     organisation.Name,
+			Glyph:     initialOf(organisation.Name),
+			Tag:       p.T("member_kind." + organisation.Kind),
+			Meta:      organisation.Place,
+		}
+		// No page of its own: the popup leads to the collectives it is part
+		// of, which is where a reader sees it at work.
+		if len(organisation.In) > 0 {
+			item.Text = p.T("map.member_of")
+			for _, collective := range organisation.In {
+				item.Links = append(item.Links, mapLink{
+					Text: collective.Name, Href: "/collectives/" + url.PathEscape(collective.Slug),
+				})
+			}
+		}
+		answer.Items = append(answer.Items, item)
+	}
+
 	answer.Status = p.Tf("map.status",
 		"Topics", p.Count(view.Totals.Topics),
 		"Actions", p.Count(view.Totals.Actions),
-		"Collectives", p.Count(view.Totals.Collectives))
+		"Collectives", p.Count(view.Totals.Collectives),
+		"Organisations", p.Count(view.Totals.Organisations))
 
 	// A few seconds, shared: every reader looking at the same part of the
 	// country asks the same question, and the backend invalidates its own

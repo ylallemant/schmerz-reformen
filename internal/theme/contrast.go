@@ -82,6 +82,7 @@ var contrastPairs = []struct {
 	{"on-mark", "mark-topic", 3.0},
 	{"on-mark", "mark-action", 3.0},
 	{"on-mark", "mark-collective", 3.0},
+	{"on-mark", "mark-organisation", 3.0},
 	{"text-muted", "bg", 3.0},
 	{"error", "bg", 3.0},
 	{"warn", "bg", 3.0},

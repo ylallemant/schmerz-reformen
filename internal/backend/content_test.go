@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -12,6 +13,8 @@ import (
 
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/store"
+
+	"github.com/ylallemant/schmerz-reformen/internal/cache"
 )
 
 // statusOf reads the HTTP status a handler's error carries.
@@ -837,5 +840,73 @@ func TestTheMapCountsEverythingWhateverItDraws(t *testing.T) {
 	// A nonsense viewport is refused rather than read as the whole world.
 	if _, err := a.readMap(anonymous(), &BoundsInput{Bounds: "everywhere"}); statusOf(err) != http.StatusUnprocessableEntity {
 		t.Errorf("a nonsense viewport: %v, want 422", err)
+	}
+}
+
+// TestTheMapShowsTheOrganisationsPublishedCollectivesList: an organisation
+// has no page of its own, so it is public only as a published collective's
+// member. The marker names those collectives — how a reader reaches it — and
+// carries nothing of the groups that decide who runs it.
+func TestTheMapShowsTheOrganisationsPublishedCollectivesList(t *testing.T) {
+	a := newAPI(t)
+	owner := founded(t, a, "Bündnis Düsseldorf", "duesseldorf")
+
+	organisation := func(name string, lat, lng float64) string {
+		in := &CreateOrganisationInput{}
+		in.Body.Name, in.Body.Kind = name, "union"
+		in.Body.Latitude, in.Body.Longitude, in.Body.Zoom, in.Body.Place = lat, lng, 15, name
+		made, err := a.staffCreateOrganisation(admin(), in)
+		if err != nil {
+			t.Fatalf("staffCreateOrganisation(%q): %v", name, err)
+		}
+		return made.Body.ID
+	}
+	member := func(collectiveID, organisationID string) {
+		in := &CreateMemberInput{ID: collectiveID}
+		in.Body.OrganisationID = organisationID
+		if _, err := a.staffCreateMember(admin(), in); err != nil {
+			t.Fatalf("staffCreateMember: %v", err)
+		}
+	}
+
+	listed := organisation("ver.di Düsseldorf", 51.2277, 6.7735)
+	elsewhere := organisation("ver.di Köln", 50.9375, 6.9603)
+	nobodys := organisation("Niemandes Mitglied", 51.23, 6.78)
+	member(owner.ID, listed)
+	member(owner.ID, elsewhere)
+	_ = nobodys
+
+	view, err := a.readMap(anonymous(), &BoundsInput{Bounds: "51.4,51.1,6.95,6.6"})
+	if err != nil {
+		t.Fatalf("readMap: %v", err)
+	}
+	if len(view.Body.Organisations) != 1 || view.Body.Organisations[0].ID != listed {
+		t.Fatalf("drew %+v, want only the listed one in view", view.Body.Organisations)
+	}
+	if view.Body.Totals.Organisations != 2 {
+		t.Errorf("organisations total = %d, want the 2 a published collective lists, in view or not", view.Body.Totals.Organisations)
+	}
+	in := view.Body.Organisations[0].In
+	if len(in) != 1 || in[0].Slug != "duesseldorf" {
+		t.Errorf("the marker names %+v, want the collective that lists it", in)
+	}
+	raw, _ := json.Marshal(view.Body.Organisations)
+	if strings.Contains(string(raw), "schmerz-organisation-") {
+		t.Errorf("the public map carries an organisation's groups: %s", raw)
+	}
+
+	// The collective taken back to draft takes its members off the map.
+	back := &SaveCollectiveInput{ID: owner.ID}
+	back.Body.Name, back.Body.Status = "Bündnis Düsseldorf", "draft"
+	if _, err := a.staffSaveCollective(admin(), back); err != nil {
+		t.Fatalf("staffSaveCollective: %v", err)
+	}
+	a.cache.Drop(cache.Map)
+	view, err = a.readMap(anonymous(), &BoundsInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.Body.Organisations) != 0 || view.Body.Totals.Organisations != 0 {
+		t.Errorf("with its collective in draft: %d drawn, %d counted, want none", len(view.Body.Organisations), view.Body.Totals.Organisations)
 	}
 }
