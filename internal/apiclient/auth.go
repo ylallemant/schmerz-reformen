@@ -87,6 +87,10 @@ type Provisioning struct {
 	// ServiceAccountNote why it kept the operator's token.
 	ServiceAccount     string `json:"service_account,omitempty"`
 	ServiceAccountNote string `json:"service_account_note,omitempty"`
+
+	// DirectoryByPlatform says the backend works with the deployment
+	// platform's service account, from its environment.
+	DirectoryByPlatform bool `json:"directory_by_platform,omitempty"`
 }
 
 // provisionTimeout is how long provisioning may take: twenty-odd round trips

@@ -45,6 +45,10 @@ type Provisioning struct {
 	// AdminLink is a way in for the first administrator, shown once.
 	AdminLink string
 
+	// DirectoryByPlatform says the backend works with the deployment
+	// platform's service account, so no token or account was made here.
+	DirectoryByPlatform bool
+
 	// ServiceAccount is the account the backend now works as, and
 	// ServiceAccountNote why it does not when it does not.
 	ServiceAccount     string
@@ -137,8 +141,17 @@ func ensureFirstAdmin(ctx context.Context, client *authentik.Client, first first
 // operator's directory, so the wizard creates none — except a recovery flow,
 // because Authentik ships none and a recovery link is the only way this site
 // hands an account over. See authentik.EnsureRecoveryFlow.
+//
+// # When the platform also gives the backend its directory access
+//
+// With platformDirectory the backend reaches the directory with a service
+// account the platform made and a token from its environment. Setup then
+// mints no token and makes no account: the platform owns both, and sets the
+// token back to its own value on every reconcile, so a token stored here would
+// stop working the moment it did. What is left is the operator's part — the
+// recovery flow bound to this site's brand, and the first administrator.
 func provision(ctx context.Context, client *authentik.Client, consoleURL, appName string,
-	first firstAdmin, platformSignIn bool) (Provisioning, error) {
+	first firstAdmin, platformSignIn, platformDirectory bool) (Provisioning, error) {
 	var result Provisioning
 	result.InstanceURL = client.InstanceURL()
 	result.AppName = appName
@@ -278,33 +291,40 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 		return result, fmt.Errorf("put %s in %s: %w", admin.Username, adminGroupName, err)
 	}
 
-	// The credential the backend keeps from here. The pasted token is a
-	// bootstrap credential that Authentik expires in thirty minutes by
-	// default; keeping it would make a working installation refuse every
-	// editor half an hour later.
-	keep, err := client.EnsureConsoleToken(ctx, appName, me.PK)
-	if err != nil {
-		return result, fmt.Errorf("mint this site's own token: %w", err)
-	}
-	result.ConsoleToken = keep
-	result.Reconciled = append(result.Reconciled, keep.Repaired...)
-	apiToken := keep.Key
+	var apiToken string
+	if platformDirectory {
+		// The platform's account, from the backend's environment: nothing to
+		// mint, and nothing to store.
+		result.DirectoryByPlatform = true
+	} else {
+		// The credential the backend keeps from here. The pasted token is a
+		// bootstrap credential that Authentik expires in thirty minutes by
+		// default; keeping it would make a working installation refuse every
+		// editor half an hour later.
+		keep, err := client.EnsureConsoleToken(ctx, appName, me.PK)
+		if err != nil {
+			return result, fmt.Errorf("mint this site's own token: %w", err)
+		}
+		result.ConsoleToken = keep
+		result.Reconciled = append(result.Reconciled, keep.Repaired...)
+		apiToken = keep.Key
 
-	// And the site's own account, so it does not depend on the person who
-	// ran this staying in the directory with today's rights. Switched to only
-	// once it exists, holds its role and its token answered; anything less
-	// keeps the token just minted, and says why.
-	service, err := client.EnsureServiceAccount(ctx, appName)
-	switch {
-	case err != nil:
-		log.Error().Err(err).Msg("cannot set up the service account; keeping the operator's token")
-		result.ServiceAccountNote = "the service account could not be set up: " + err.Error()
-	case service.Ready:
-		apiToken = service.Key
-		result.ServiceAccount = service.Username
-		result.Reconciled = append(result.Reconciled, service.Repaired...)
-	default:
-		result.ServiceAccountNote = service.NotUsed
+		// And the site's own account, so it does not depend on the person
+		// who ran this staying in the directory with today's rights.
+		// Switched to only once it exists, holds its role and its token
+		// answered; anything less keeps the token just minted, and says why.
+		service, err := client.EnsureServiceAccount(ctx, appName)
+		switch {
+		case err != nil:
+			log.Error().Err(err).Msg("cannot set up the service account; keeping the operator's token")
+			result.ServiceAccountNote = "the service account could not be set up: " + err.Error()
+		case service.Ready:
+			apiToken = service.Key
+			result.ServiceAccount = service.Username
+			result.Reconciled = append(result.Reconciled, service.Repaired...)
+		default:
+			result.ServiceAccountNote = service.NotUsed
+		}
 	}
 
 	// The group of everybody who may use the console, so the first people
@@ -344,7 +364,8 @@ func provision(ctx context.Context, client *authentik.Client, consoleURL, appNam
 		AdminGroup:    admins.PK,
 		ProvisionedBy: admin.Username,
 
-		SignInByPlatform: platformSignIn,
+		SignInByPlatform:    platformSignIn,
+		DirectoryByPlatform: platformDirectory,
 	}
 
 	log.Warn().

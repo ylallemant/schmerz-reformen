@@ -23,7 +23,12 @@
        <code>{{ .AdminGroup }}</code>, and everybody who may use the console is in
        <code>{{ .Result.AppName }}-users</code>. Each collective and each organisation is given
        groups of its own when it is created, named after its address.</p>
-    {{ if .Result.ServiceAccount }}
+    {{ if .Result.DirectoryByPlatform }}
+    <p><strong>The token you pasted is no longer needed and may expire.</strong> The backend
+       works with the service account the deployment platform made for it, whose token it reads
+       from its environment and the platform keeps in line. Nothing was minted here, and no token
+       is stored.</p>
+    {{ else if .Result.ServiceAccount }}
     <p><strong>The token you pasted is no longer needed and may expire.</strong> From now on the
        backend works as the service account <code>{{ .Result.ServiceAccount }}</code>, which holds
        only the permissions it needs — managing users and groups — through the role
@@ -196,10 +201,12 @@
        this run requires them and makes none. Run the platform's <code>identity reconcile</code>
        first. Point the address above at this site's own sign-in address (its issuer, without the
        path), so that invite links are made there.</p>
-    <p>What this creates is what the platform does not give yet: a service account
+    <p>What this creates is the recovery flow, bound to the brand of that address, and the first
+       administrator's place in <code>{{ .AppName }}-admins</code>. When the platform gives the
+       backend its directory access too, that is all; otherwise it also makes a service account
        <code>{{ .AppName }}-service</code> with a role holding only what the backend needs and a
        token of its own — which makes each collective's and organisation's groups and hands out
-       invite links — and a recovery flow, bound to the brand of that address.</p>
+       invite links.</p>
   </div>
   {{ else }}
   <div class="notice">

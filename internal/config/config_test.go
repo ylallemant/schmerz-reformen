@@ -360,3 +360,42 @@ func TestThePlatformsClientComesWhole(t *testing.T) {
 		})
 	}
 }
+
+// TestThePlatformsDirectoryAccessComesWhole: an address without a token, or a
+// token without an address, would refuse every editor at the first request —
+// refused at startup instead.
+func TestThePlatformsDirectoryAccessComesWhole(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		env           map[string]string
+		want, refused bool
+	}{
+		{"none", nil, false, false},
+		{"whole", map[string]string{"SCHMERZ_AUTHENTIK_URL": "https://auth.example.org", "SCHMERZ_AUTHENTIK_TOKEN": "t"}, true, false},
+		{"no token", map[string]string{"SCHMERZ_AUTHENTIK_URL": "https://auth.example.org"}, false, true},
+		{"no address", map[string]string{"SCHMERZ_AUTHENTIK_TOKEN": "t"}, false, true},
+		{"not an address", map[string]string{"SCHMERZ_AUTHENTIK_URL": "auth.example.org", "SCHMERZ_AUTHENTIK_TOKEN": "t"}, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for key, value := range tc.env {
+				t.Setenv(key, value)
+			}
+			cmd := &cobra.Command{Use: "test", RunE: func(*cobra.Command, []string) error { return nil }}
+			Reset()
+			t.Cleanup(Reset)
+			RegisterCommonFlags(cmd, 8080, 8081)
+			RegisterDirectoryFlags(cmd)
+			cmd.SetArgs(nil)
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if err := Bootstrap(cmd); err != nil {
+				t.Fatal(err)
+			}
+			access, err := LoadDirectoryAccess()
+			if (err != nil) != tc.refused || (access != nil) != tc.want {
+				t.Errorf("access %+v, err %v; want one %v, refused %v", access, err, tc.want, tc.refused)
+			}
+		})
+	}
+}

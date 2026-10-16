@@ -178,7 +178,7 @@ func (a *API) groupsFromDirectory(ctx huma.Context, identity *staffauth.Identity
 		// the operator's problem. Nobody can act until it is replaced.
 		log.Error().Err(err).Msg("the directory refused the backend's token: no editor can act until it is replaced")
 		return http.StatusServiceUnavailable,
-			"the console's access to the identity provider has been revoked — an operator has to run its setup again"
+			tokenRevoked
 	case err != nil:
 		// A directory that cannot be reached refuses, deliberately: carrying
 		// on with what the editor's cookie says is exactly what reading roles

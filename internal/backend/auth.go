@@ -213,6 +213,10 @@ type ProvisionItem struct {
 	// ServiceAccountNote why it kept the operator's token.
 	ServiceAccount     string `json:"service_account,omitempty"`
 	ServiceAccountNote string `json:"service_account_note,omitempty"`
+
+	// DirectoryByPlatform says the backend works with the deployment
+	// platform's service account, from its environment.
+	DirectoryByPlatform bool `json:"directory_by_platform,omitempty"`
 }
 
 // ProvisionOutput is the outcome.
@@ -258,13 +262,14 @@ func (a *API) consoleProvisionAuth(ctx context.Context, in *ProvisionInput) (*Pr
 
 	result, err := provision(ctx, client, consoleURL, appName, firstAdmin{
 		Username: in.Body.AdminUsername, Name: in.Body.AdminName,
-	}, in.Body.SignInByPlatform)
+	}, in.Body.SignInByPlatform, a.directory.access != nil)
 	out := &ProvisionOutput{Body: ProvisionItem{
 		Done: result.Done, Missing: result.Missing, AdminUsername: result.AdminUsername,
 		TokenOwner: result.TokenOwner, InstanceURL: result.InstanceURL, AppName: result.AppName,
 		RecoveryReady: result.RecoveryReady, OwnToken: result.ConsoleToken.Identifier,
 		AdminLink: result.AdminLink, Reconciled: result.Reconciled,
 		ServiceAccount: result.ServiceAccount, ServiceAccountNote: result.ServiceAccountNote,
+		DirectoryByPlatform: result.DirectoryByPlatform,
 	}}
 	if err != nil {
 		// Authentik's own words where there are any: "slug: this field must be

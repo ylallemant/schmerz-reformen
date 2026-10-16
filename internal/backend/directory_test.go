@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ylallemant/schmerz-reformen/internal/config"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 	"github.com/ylallemant/schmerz-reformen/internal/staffauth"
 )
@@ -901,5 +902,63 @@ func TestSetUpBesideThePlatformsSignIn(t *testing.T) {
 	settings, err := a.consoleGetAuth(context.Background(), nil)
 	if err != nil || !settings.Body.SignInByPlatform || settings.Body.ClientID != "" {
 		t.Errorf("stored settings: %+v, %v", settings.Body, err)
+	}
+}
+
+// TestThePlatformsServiceAccountIsUsedAndNothingIsMinted: when the deployment
+// platform gives the backend its directory access, setup makes no token and
+// no account — the platform owns them and sets the token back to its own on
+// every reconcile, so a copy stored here would stop working — and the backend
+// asks the directory with the platform's token, never a stored one.
+func TestThePlatformsServiceAccountIsUsedAndNothingIsMinted(t *testing.T) {
+	a := newAPI(t)
+	f := newFakeDirectory(t)
+	f.ownBrand = true
+	a.directory.access = &config.DirectoryAccess{URL: f.URL(), Token: "the-platform-token"}
+	f.mu.Lock()
+	for _, name := range []string{"schmerz-admins", "schmerz-users", "schmerz-pending"} {
+		f.groupNamed(name)
+	}
+	f.mu.Unlock()
+
+	in := &ProvisionInput{}
+	in.Body.InstanceURL, in.Body.Token = f.URL(), "a-pasted-setup-token"
+	in.Body.ConsoleURL = "https://console.example/"
+	in.Body.AdminUsername, in.Body.AdminName = "maria", "Maria"
+	in.Body.SignInByPlatform = true
+	out, err := a.consoleProvisionAuth(context.Background(), in)
+	if err != nil || !out.Body.Done || !out.Body.DirectoryByPlatform {
+		t.Fatalf("consoleProvisionAuth: %+v, %v", out, err)
+	}
+	if f.called("POST /core/users/service_account/") != 0 || f.called("POST /core/tokens/") != 0 {
+		t.Error("an account or a token was made beside the platform's")
+	}
+	if out.Body.AdminLink == "" {
+		t.Error("the first administrator was given no way in")
+	}
+
+	settings, err := a.store.AuthSettings(context.Background())
+	if err != nil || settings.APIToken != "" || !settings.DirectoryByPlatform {
+		t.Errorf("stored: token %q, by platform %v, %v — nothing to store", settings.APIToken, settings.DirectoryByPlatform, err)
+	}
+
+	before := len(f.bearers)
+	if _, err := a.staffListPeople(admin(), nil); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	used := f.bearers[before:]
+	f.mu.Unlock()
+	for _, bearer := range used {
+		if bearer != "the-platform-token" {
+			t.Fatalf("the directory was asked with %q, want the platform's token", bearer)
+		}
+	}
+
+	// Set up for the platform's account and started without it: said, rather
+	// than a connection with an empty token.
+	alone := &directory{}
+	if err := alone.connect(settings); err == nil || !strings.Contains(err.Error(), config.KeyAuthentikToken) {
+		t.Errorf("a backend without the platform's token: %v, want it to name what to set", err)
 	}
 }

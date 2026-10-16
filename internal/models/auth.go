@@ -107,6 +107,12 @@ type AuthSettings struct {
 	// give yet — the service account and the recovery flow.
 	SignInByPlatform bool `json:"sign_in_by_platform,omitempty"`
 
+	// DirectoryByPlatform says the backend reaches the directory with the
+	// service account the deployment platform made, from its environment
+	// (--authentik-url, --authentik-token): setup made no token and no
+	// account of its own, and APIToken is empty.
+	DirectoryByPlatform bool `json:"directory_by_platform,omitempty"`
+
 	// OnboardingDomains are the domains whose addresses may make their own
 	// console account, waiting for approval: "sozialratschlag.de, ...". Set in
 	// the setup wizard and changed by the site's administrators. Empty is

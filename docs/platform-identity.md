@@ -6,11 +6,17 @@ itself to the one the deployment platform makes. Decided on 2026-10-15:
 - **The platform owns sign-in**: the OIDC client, the static groups
   (`schmerz-admins`, `schmerz-users`, `schmerz-pending`) and this project's own
   sign-in address, `auth.<its zone>`, with a brand of its own.
-- **The setup wizard keeps what the platform does not give yet**: the service
-  account the backend makes the per-collective and per-organisation groups
-  with, manages people with and mints invite links with — and the recovery
-  flow, which it binds to this project's own brand. When the platform
-  provisions dynamic roles (its plan 15, step 5), the wizard can go.
+- **The platform also gives the backend its directory access** (its plan 15,
+  step 5): the service account `schmerz-service`, holding what
+  `identity.service.manages: [groups, people, recovery]` grants, and its token
+  `schmerz-service-api`, which the backend reads from `SCHMERZ_AUTHENTIK_URL`
+  and `SCHMERZ_AUTHENTIK_TOKEN`. The platform takes over the account setup made
+  (`--adopt`) and sets its token to its own value — so the token setup stored
+  stops working at that moment, and the backend no longer uses it.
+- **The setup wizard keeps the operator's part**: binding the recovery flow to
+  this project's own brand, and putting the first administrator in
+  `schmerz-admins`. It mints no token and makes no account when the backend has
+  the platform's.
 - **The wizard's old groups are recreated empty**, not adopted: everybody's
   roles are given again afterwards.
 
@@ -32,6 +38,14 @@ itself to the one the deployment platform makes. Decided on 2026-10-15:
   recovery flow precisely so that the project binds its own. On the shared
   address it is still the default brand, bound only when it has none.
 
+- **Directory access from the environment** (`config.DirectoryAccess`,
+  `backend.directory.connect`): with `SCHMERZ_AUTHENTIK_URL` and
+  `SCHMERZ_AUTHENTIK_TOKEN` set, the backend reaches Authentik with them and
+  never with a stored token; setup then mints none and stores
+  `DirectoryByPlatform`. One without the other is refused at startup, and a
+  backend set up that way and started without them says which settings to
+  set.
+
 ## What changed in the deployment
 
 `transistor-application-schmerz-reformen`:
@@ -42,6 +56,15 @@ itself to the one the deployment platform makes. Decided on 2026-10-15:
   collapses `stage` so there is one identity, named `schmerz`.
 - The console reads `issuer`, `client_id`, `client_secret` and the
   administrator group from the identity.
+- **Still to declare, by the session that tends the deployment** (not done
+  from here): `identity.service.manages: [groups, people, recovery]` — without
+  it the default cuts the role back to groups only and the backend loses the
+  rights to make people and read flows — and on the backend
+  `SCHMERZ_AUTHENTIK_URL` from `{ identity: api }` and `SCHMERZ_AUTHENTIK_TOKEN`
+  from `{ identity: service_token }`. Neither is a sign-in reference, so the
+  backend reading them does not put its names on the client's redirects; nor
+  is `{ identity: group, role: administrator }`, which the backend's
+  `SCHMERZ_ADMIN_GROUP` can now read too.
 
 ## The switch-over, in order
 
@@ -67,18 +90,22 @@ Nothing here has been run. Each step is an operator's, against shared state.
    - the groups `schmerz-admins`, `schmerz-users` and, if it exists,
      `schmerz-pending` — **their members lose their roles**; note who they were.
 
-   Leave `schmerz-service` (the backend's service account, its group and role),
-   the `schmerz-recovery` flow, and every per-collective and per-organisation
-   group: the platform does not touch dynamic groups.
+   Leave `schmerz-service` (the backend's service account, its group and role)
+   — the platform takes it over with `--adopt` — the `schmerz-recovery` flow,
+   and every per-collective and per-organisation group: the platform does not
+   touch dynamic groups.
 5. **Reconcile the identity, then the cell, then deploy**:
    ```
-   transistor identity reconcile --dry-run
-   transistor identity reconcile
+   transistor identity reconcile --dry-run --adopt
+   transistor identity reconcile --adopt
    transistor reconcile paris
    go -C …/transistor/binary/cmd/transistor run . environment apply paris --application schmerz-reformen
    ```
-   The dry run should show the client `schmerz`, the three groups, and the brand
-   on `auth.schmerz-reformen.de`. `environment render paris --application
+   The dry run should show the client `schmerz`, the three groups, the brand
+   on `auth.schmerz-reformen.de`, and `schmerz-service` adopted with all eleven
+   permissions. **Deploy the release that reads the token from the environment
+   before or with the adopting run**: from that run on, the token setup stored
+   is refused. `environment render paris --application
    schmerz-reformen --strict` before applying shows whether every
    `from: { identity: … }` resolved.
 6. **Run setup again** on the console's maintenance port, with

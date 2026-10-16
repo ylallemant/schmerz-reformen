@@ -10,6 +10,7 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"github.com/ylallemant/schmerz-reformen/internal/authentik"
+	"github.com/ylallemant/schmerz-reformen/internal/config"
 	"github.com/ylallemant/schmerz-reformen/internal/models"
 )
 
@@ -44,6 +45,12 @@ type directory struct {
 	// userAgent is what the directory is asked as; see internal/outbound.
 	userAgent string
 
+	// access is the deployment platform's service account for this backend,
+	// when it gives one. Then it is what the directory is reached with, and
+	// the token setup stored is not used — the platform owns the account and
+	// sets its token back to its own value, so a stored copy goes stale.
+	access *config.DirectoryAccess
+
 	mu       sync.RWMutex
 	client   *authentik.Client
 	settings models.AuthSettings
@@ -57,9 +64,23 @@ type cachedRoles struct {
 	at     time.Time
 }
 
+// tokenRevoked is what an editor is told when the directory refuses the
+// backend's own token: nothing they did, and nothing they can fix. Both
+// remedies are named, because which one applies depends on where the token
+// came from — the console's setup, or the deployment platform.
+const tokenRevoked = "the console's access to the identity provider has been revoked — an operator has to " +
+	"run its setup again, or the deployment platform's identity reconcile when the platform gives the token"
+
 // connect points the backend at a provisioned directory.
 func (d *directory) connect(settings models.AuthSettings) error {
-	client, err := authentik.New(settings.InstanceURL, settings.APIToken)
+	instance, token := settings.InstanceURL, settings.APIToken
+	if d.access != nil {
+		instance, token = d.access.URL, d.access.Token
+	} else if settings.DirectoryByPlatform {
+		return errors.New("setup was run for the deployment platform's service account, and this backend has " +
+			"none: set " + config.KeyAuthentikURL + " and " + config.KeyAuthentikToken)
+	}
+	client, err := authentik.New(instance, token)
 	if err != nil {
 		return fmt.Errorf("build the directory client: %w", err)
 	}

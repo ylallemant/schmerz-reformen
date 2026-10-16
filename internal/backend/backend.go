@@ -81,6 +81,9 @@ func Definition() cli.Definition {
 			config.RegisterNotificationFlags(cmd)
 			// How the services this backend calls can reach its operator.
 			config.RegisterOutboundFlags(cmd)
+			// The directory access the deployment platform gives, when it
+			// gives one.
+			config.RegisterDirectoryFlags(cmd)
 		},
 		Setup: Setup,
 	}
@@ -221,6 +224,15 @@ func Setup(svc *service.Service, common config.Common) error {
 
 	// What every request to a third party is made as: this site, its code,
 	// and how to reach whoever runs it. See internal/outbound.
+	directoryAccess, err := config.LoadDirectoryAccess()
+	if err != nil {
+		return fmt.Errorf("directory access: %w", err)
+	}
+	if directoryAccess != nil {
+		log.Info().Str("api", directoryAccess.URL).
+			Msg("the directory is reached with the deployment platform's service account, not a token setup stored")
+	}
+
 	outboundConfig := config.LoadOutbound()
 	userAgent := outboundConfig.UserAgent(svc.Version())
 	log.Info().Str("user_agent", userAgent).Msg("outbound requests identify this site")
@@ -336,7 +348,7 @@ func Setup(svc *service.Service, common config.Common) error {
 		geocoder:    geocoder,
 		staffToken:  staffConfig.Token,
 		adminGroup:  staffConfig.AdminGroup,
-		directory:   &directory{userAgent: userAgent},
+		directory:   &directory{userAgent: userAgent, access: directoryAccess},
 		userAgent:   userAgent,
 		development: common.Development,
 	}

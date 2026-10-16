@@ -229,7 +229,7 @@ func directoryRefusal(err error, doing string) error {
 	if errors.Is(err, authentik.ErrTokenRefused) {
 		log.Error().Err(err).Msg("the directory refused the backend's token")
 		return huma.Error503ServiceUnavailable(
-			"the console's access to the identity provider has been revoked — an operator has to run its setup again")
+			tokenRevoked)
 	}
 	log.Error().Err(err).Msg("the directory refused: " + doing)
 	return huma.Error502BadGateway(doing + ": " + err.Error())
